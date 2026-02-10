@@ -6,7 +6,7 @@ import { AgentRun } from '../schemas/agent-run.schema.js';
 @Injectable()
 export class AgentRunRepository {
   constructor(
-    @InjectModel(AgentRun.name)
+    @InjectModel(AgentRun.name, 'sprint_agent')
     private readonly agentRunModel: Model<AgentRun>,
   ) {}
 

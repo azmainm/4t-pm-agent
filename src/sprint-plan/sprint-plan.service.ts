@@ -2,17 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PinoLogger } from 'nestjs-pino';
 import { randomUUID } from 'crypto';
-import { TranscriptRepository } from '../database/repositories/transcript.repository.js';
-import { TeamsMessageRepository } from '../database/repositories/teams-message.repository.js';
+import { DailySummaryRepository } from '../database/repositories/daily-summary.repository.js';
 import { SprintPlanRepository } from '../database/repositories/sprint-plan.repository.js';
 import { AgentRunRepository } from '../database/repositories/agent-run.repository.js';
 import { ReactAgentService } from '../llm/agent/react-agent.service.js';
-import { ContextBuilderService } from '../processing/context-builder.service.js';
 import { DocxGeneratorService } from '../docx/docx-generator.service.js';
 import { OnedriveService } from '../graph/onedrive.service.js';
+import { TeamsChannelService } from '../graph/teams-channel.service.js';
+import { TeamsChatService } from '../graph/teams-chat.service.js';
 import { JiraService, type JiraIssueResult } from '../jira/jira.service.js';
 import { NotificationService } from '../notification/notification.service.js';
 import type { SprintPlanOutput } from '../llm/dto/sprint-plan-output.dto.js';
+import * as mammoth from 'mammoth';
 
 export interface SprintPlanResult {
   runId: string;
@@ -26,14 +27,14 @@ export class SprintPlanService {
   constructor(
     private readonly configService: ConfigService,
     private readonly logger: PinoLogger,
-    private readonly transcriptRepo: TranscriptRepository,
-    private readonly teamsMessageRepo: TeamsMessageRepository,
+    private readonly summaryRepo: DailySummaryRepository,
     private readonly sprintPlanRepo: SprintPlanRepository,
     private readonly agentRunRepo: AgentRunRepository,
     private readonly reactAgent: ReactAgentService,
-    private readonly contextBuilder: ContextBuilderService,
     private readonly docxGenerator: DocxGeneratorService,
     private readonly onedriveService: OnedriveService,
+    private readonly teamsChannelService: TeamsChannelService,
+    private readonly teamsChatService: TeamsChatService,
     private readonly jiraService: JiraService,
     private readonly notificationService: NotificationService,
   ) {
@@ -55,19 +56,37 @@ export class SprintPlanService {
     });
 
     try {
-      // Calculate sprint dates (2 weeks)
+      // Step 1: Gather all data
       const today = new Date();
       const twoWeeksAgo = new Date(today);
-      twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+      twoWeeksAgo.setDate(today.getDate() - 14);
 
-      // Step 1: Fetch all data
-      this.logger.info({ runId, event: 'sprint_plan.fetch_data' });
+      // Get last 10 daily summaries (or all from last 14 days)
+      this.logger.info({ runId, event: 'sprint_plan.fetch_summaries' });
+      const summaries = await this.summaryRepo.findByDateRange(twoWeeksAgo, today);
+      const last10Summaries = summaries.slice(-10);
 
-      const [transcripts, messages, previousPlan] = await Promise.all([
-        this.transcriptRepo.findWithSummaries(twoWeeksAgo, today),
-        this.teamsMessageRepo.findByDateRange(twoWeeksAgo, today),
-        this.sprintPlanRepo.findLatest(),
+      // Fetch Teams messages on-the-fly (don't store)
+      this.logger.info({ runId, event: 'sprint_plan.fetch_messages' });
+      const [channelMessages, chatMessages] = await Promise.all([
+        this.teamsChannelService.fetchAllChannelMessages(twoWeeksAgo, today),
+        this.teamsChatService.fetchAllChatMessages(twoWeeksAgo, today),
       ]);
+      const allMessages = [...channelMessages, ...chatMessages];
+
+      // Get previous sprint plan from OneDrive
+      this.logger.info({ runId, event: 'sprint_plan.fetch_previous_plan' });
+      const sprintPlansFolderId = this.configService.get<string>('onedrive.sprintPlansFolderId')!;
+      const previousPlanFile = await this.onedriveService.findLatestSprintPlan(sprintPlansFolderId);
+      
+      let previousPlanText = '';
+      let previousPlan = null;
+      if (previousPlanFile) {
+        const fileBuffer = await this.onedriveService.downloadFile(previousPlanFile.id);
+        const result = await mammoth.extractRawText({ buffer: fileBuffer });
+        previousPlanText = result.value;
+        previousPlan = await this.sprintPlanRepo.findLatest();
+      }
 
       await this.agentRunRepo.addStep(runId, {
         stepName: 'fetch_data',
@@ -75,86 +94,48 @@ export class SprintPlanService {
         completedAt: new Date(),
         success: true,
         metadata: {
-          transcriptsCount: transcripts.length,
-          messagesCount: messages.length,
-          hasPreviousPlan: !!previousPlan,
+          summariesCount: last10Summaries.length,
+          messagesCount: allMessages.length,
+          hasPreviousPlan: !!previousPlanText,
         },
       });
 
       this.logger.info({
         runId,
-        transcriptsCount: transcripts.length,
-        messagesCount: messages.length,
-        hasPreviousPlan: !!previousPlan,
+        summariesCount: last10Summaries.length,
+        messagesCount: allMessages.length,
+        hasPreviousPlan: !!previousPlanText,
       });
 
-      // Step 2: Build context
-      const contextInput = {
-        dailySummaries: transcripts.map(t => ({
-          date: t.date,
-          overallSummary: t.dailySummary?.overallSummary || '',
-          actionItems: t.dailySummary?.actionItems || [],
-          decisions: t.dailySummary?.decisions || [],
-          blockers: t.dailySummary?.blockers || [],
-          perPersonSummary: (t.dailySummary?.perPersonSummary || []).map(p => ({
-            ...p,
-            commitments: p.nextSteps || [],
-          })),
-        })),
-        teamsMessages: messages.map(m => ({
-          senderName: m.senderName,
-          content: m.content,
-          sentAt: m.timestamp,
-          channelOrChatName: m.channelOrChatName,
-          source: m.source,
-        })),
-        previousPlanText: previousPlan?.extractedText || '',
-      };
+      // Step 2: Multi-pass agent analysis (dynamic context handling)
+      this.logger.info({ runId, event: 'sprint_plan.agent.multi_pass_start' });
 
-      const context = this.contextBuilder.buildSprintPlanContext(contextInput);
+      // Pass 1: Analyze daily summaries
+      const summariesAnalysis = await this.analyzeSummaries(last10Summaries, runId);
 
-      await this.agentRunRepo.addStep(runId, {
-        stepName: 'build_context',
-        startedAt: new Date(),
-        completedAt: new Date(),
-        success: true,
-        metadata: { contextLength: context.length },
-      });
+      // Pass 2: Analyze Teams messages
+      const messagesAnalysis = await this.analyzeMessages(allMessages, runId);
 
-      // Step 3: Run agent to generate plan
-      this.logger.info({ runId, event: 'sprint_plan.agent.start' });
-      
-      // Build system prompt with roster
-      const teamMembers = this.configService.get<any[]>('roster.members', []);
-      const systemPrompt = `You are a sprint planning agent. Generate a comprehensive sprint plan based on the provided context.\n\nTeam: ${teamMembers.map(m => m.name).join(', ')}`;
-      const userMessage = `Based on the following context, generate the sprint plan:\n\n${context}`;
-      
-      const agentResult = await this.reactAgent.runSprintPlanAgent(systemPrompt, userMessage);
-      const sprintPlanOutput = agentResult.plan;
+      // Pass 3: Analyze previous plan
+      const previousPlanAnalysis = await this.analyzePreviousPlan(previousPlanText, runId);
 
-      await this.agentRunRepo.addStep(runId, {
-        stepName: 'agent_generate_plan',
-        startedAt: new Date(),
-        completedAt: new Date(),
-        success: true,
-      });
+      // Pass 4: Generate final sprint plan
+      const sprintPlanOutput = await this.generateFinalPlan(
+        summariesAnalysis,
+        messagesAnalysis,
+        previousPlanAnalysis,
+        runId,
+      );
 
-      this.logger.info({ runId, event: 'sprint_plan.agent.completed' });
-
-      // Step 4: Save plan to DB
-      const nextSprintStart = new Date(today);
-      nextSprintStart.setDate(nextSprintStart.getDate() + 1);
-      const nextSprintEnd = new Date(nextSprintStart);
-      nextSprintEnd.setDate(nextSprintEnd.getDate() + 14);
-
+      // Step 3: Save plan to DB
       const planDataWithRubric = {
         ...sprintPlanOutput,
         pointsRubric: {
-          '1': 'straightforward, clear path',
-          '2': 'some complexity but well-understood',
-          '3': 'moderate complexity or some unknowns',
-          '4': 'complex, multiple pieces, or unclear areas',
-          '5': 'very complex, significant unknown',
+          '1': 'Small task, 1-2 hours',
+          '2': 'Medium task, 2-4 hours',
+          '3': 'Large task, 4-8 hours',
+          '5': 'Very large task, 1-2 days',
+          '8': 'Epic task, 2-3 days',
         },
       };
 
@@ -167,7 +148,7 @@ export class SprintPlanService {
 
       this.logger.info({ runId, event: 'sprint_plan.saved', sprintPlanId: sprintPlan._id });
 
-      // Step 5: Generate .docx
+      // Step 4: Generate .docx
       const docxBuffer = await this.docxGenerator.generate(sprintPlanOutput);
 
       await this.agentRunRepo.addStep(runId, {
@@ -180,20 +161,16 @@ export class SprintPlanService {
 
       this.logger.info({ runId, event: 'sprint_plan.docx.generated' });
 
-      // Step 6: Upload to OneDrive
+      // Step 5: Upload to OneDrive & Archive old files
       const fileName = `Sprint_${sprintPlanOutput.sprintDateRange.start}_Plan_v1.0.docx`;
-      const sprintPlansFolderId = this.configService.get<string>('onedrive.sprintPlansFolderId')!;
       const uploadResult = await this.onedriveService.uploadFile(sprintPlansFolderId, fileName, docxBuffer);
 
       // Archive previous plan (both .docx and .md files)
-      if (previousPlan?.onedriveFileName) {
+      if (previousPlan && previousPlan.onedriveFileName) {
         const archiveFolderId = this.configService.get<string>('onedrive.archiveFolderId')!;
         const baseName = previousPlan.onedriveFileName.replace(/\.docx$/, '');
         
-        // Get all files in sprint plans folder
         const allFiles = await this.onedriveService.listFolder(sprintPlansFolderId);
-        
-        // Find and move both .docx and .md files matching the previous plan
         const filesToArchive = allFiles.filter(
           (file) => file.name.startsWith(baseName) && (file.name.endsWith('.docx') || file.name.endsWith('.md')),
         );
@@ -220,7 +197,7 @@ export class SprintPlanService {
 
       this.logger.info({ runId, event: 'sprint_plan.uploaded', fileId: uploadResult.id });
 
-      // Step 7: Send notification with approval option
+      // Step 6: Send notification
       await this.notificationService.sendSprintPlanReady(
         sprintPlan._id.toString(),
         fileName,
@@ -230,14 +207,7 @@ export class SprintPlanService {
       // Mark as completed
       await this.agentRunRepo.updateStatus(runId, 'completed', {
         sprintPlanId: sprintPlan._id.toString(),
-        stats: {
-          transcriptsFetched: transcripts.length,
-          messagesFetched: messages.length,
-          durationMs: Date.now() - startedAt.getTime(),
-        },
       });
-
-      this.logger.info({ runId, event: 'sprint_plan.completed', sprintPlanId: sprintPlan._id });
 
       return {
         runId,
@@ -245,61 +215,209 @@ export class SprintPlanService {
         sprintPlanId: sprintPlan._id.toString(),
       };
     } catch (error) {
-      this.logger.error({ runId, error: error.message, stack: error.stack }, 'Sprint plan generation failed');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error({ runId, error: errorMessage }, 'Sprint plan generation failed');
 
       await this.agentRunRepo.updateStatus(runId, 'failed', {
-        error: error.message,
+        error: errorMessage,
       });
 
-      await this.notificationService.sendError('Sprint Plan Generation', error.message, runId);
+      await this.notificationService.sendError('Sprint Plan Generation', errorMessage, runId);
 
       return {
         runId,
         success: false,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }
 
-  async approveAndCreateJiraTasks(sprintPlanId: string): Promise<{ success: boolean; jiraIssueKeys?: string[]; error?: string }> {
-    try {
-      const sprintPlan = await this.sprintPlanRepo.findById(sprintPlanId);
-      if (!sprintPlan) {
-        return { success: false, error: 'Sprint plan not found' };
-      }
+  private async analyzeSummaries(summaries: any[], runId: string): Promise<string> {
+    this.logger.info({ runId, event: 'sprint_plan.analyze_summaries', count: summaries.length });
 
-      this.logger.info({ sprintPlanId, event: 'sprint_plan.approve.start' });
+    const summariesText = summaries.map(s => {
+      const date = new Date(s.date).toISOString().split('T')[0];
+      return `
+Date: ${date}
+Overall: ${s.overallSummary}
+Action Items: ${s.actionItems.join(', ')}
+Decisions: ${s.decisions.join(', ')}
+Blockers: ${s.blockers.join(', ')}
+Per Person:
+${s.perPersonSummary.map((p: any) => `  - ${p.name}: ${p.summary} (Next: ${p.nextSteps.join(', ')})`).join('\n')}
+      `.trim();
+    }).join('\n\n---\n\n');
 
-      // Create Jira issues
-      const jiraIssues = await this.jiraService.createIssuesForPlan(sprintPlan.planData as any);
+    const prompt = `Analyze these daily standup summaries and extract:
+1. Key accomplishments
+2. Recurring themes/patterns
+3. Blockers or challenges
+4. Action items that need follow-up
 
-      // Update plan status and Jira keys
-      await this.sprintPlanRepo.updateStatus(sprintPlanId, 'approved', {
-        approvedAt: new Date(),
-      });
+Summaries:
+${summariesText}`;
 
-      await this.sprintPlanRepo.updateJiraIssues(
-        sprintPlanId,
-        jiraIssues.map((i: JiraIssueResult) => i.jiraIssueKey),
-      );
+    const response = await this.reactAgent.callLLM(prompt);
+    
+    await this.agentRunRepo.addStep(runId, {
+      stepName: 'analyze_summaries',
+      startedAt: new Date(),
+      completedAt: new Date(),
+      success: true,
+      metadata: { count: summaries.length },
+    });
 
-      this.logger.info({ sprintPlanId, event: 'sprint_plan.approved', jiraIssuesCount: jiraIssues.length });
+    return response;
+  }
 
-      await this.notificationService.sendApprovalConfirmation(
-        sprintPlanId,
-        jiraIssues.length,
-      );
+  private async analyzeMessages(messages: any[], runId: string): Promise<string> {
+    this.logger.info({ runId, event: 'sprint_plan.analyze_messages', count: messages.length });
 
-      return {
-        success: true,
-        jiraIssueKeys: jiraIssues.map((i: JiraIssueResult) => i.jiraIssueKey),
-      };
-    } catch (error) {
-      this.logger.error({ sprintPlanId, error: error.message }, 'Approval failed');
-      return {
-        success: false,
-        error: error.message,
-      };
+    if (messages.length === 0) {
+      return 'No Teams messages to analyze.';
     }
+
+    // Process in chunks if too many messages
+    const chunkSize = 50;
+    const chunks = [];
+    for (let i = 0; i < messages.length; i += chunkSize) {
+      chunks.push(messages.slice(i, i + chunkSize));
+    }
+
+    const chunkAnalyses = [];
+    for (const [index, chunk] of chunks.entries()) {
+      const messagesText = chunk.map((m: any) => 
+        `[${new Date(m.timestamp).toISOString()}] ${m.senderName}: ${m.content}`
+      ).join('\n');
+
+      const prompt = `Analyze these Teams messages (chunk ${index + 1}/${chunks.length}) and extract:
+1. Important discussions
+2. Decisions made
+3. Questions or issues raised
+
+Messages:
+${messagesText}`;
+
+      const analysis = await this.reactAgent.callLLM(prompt);
+      chunkAnalyses.push(analysis);
+    }
+
+    await this.agentRunRepo.addStep(runId, {
+      stepName: 'analyze_messages',
+      startedAt: new Date(),
+      completedAt: new Date(),
+      success: true,
+      metadata: { count: messages.length, chunks: chunks.length },
+    });
+
+    return chunkAnalyses.join('\n\n---\n\n');
+  }
+
+  private async analyzePreviousPlan(previousPlanText: string, runId: string): Promise<string> {
+    this.logger.info({ runId, event: 'sprint_plan.analyze_previous_plan' });
+
+    if (!previousPlanText) {
+      return 'No previous sprint plan available.';
+    }
+
+    const prompt = `Analyze this previous sprint plan and identify:
+1. What tasks were likely completed (format/structure reference)
+2. What tasks were likely not completed
+3. Any patterns or structure to maintain
+
+Previous Plan:
+${previousPlanText}`;
+
+    const analysis = await this.reactAgent.callLLM(prompt);
+
+    await this.agentRunRepo.addStep(runId, {
+      stepName: 'analyze_previous_plan',
+      startedAt: new Date(),
+      completedAt: new Date(),
+      success: true,
+    });
+
+    return analysis;
+  }
+
+  private async generateFinalPlan(
+    summariesAnalysis: string,
+    messagesAnalysis: string,
+    previousPlanAnalysis: string,
+    runId: string,
+  ): Promise<SprintPlanOutput> {
+    this.logger.info({ runId, event: 'sprint_plan.generate_final' });
+
+    const teamMembers = this.configService.get<any[]>('roster.members', []);
+    const nextMonday = this.getNextMonday();
+    const nextNextMonday = new Date(nextMonday);
+    nextNextMonday.setDate(nextNextMonday.getDate() + 14);
+
+    const systemPrompt = `You are a sprint planning agent. Generate a comprehensive 2-week sprint plan.
+
+Team Members: ${teamMembers.map(m => `${m.name} (${m.role})`).join(', ')}
+Sprint Period: ${nextMonday.toISOString().split('T')[0]} to ${nextNextMonday.toISOString().split('T')[0]}`;
+
+    const userMessage = `Based on the following analysis, generate the next sprint plan:
+
+# Daily Summaries Analysis
+${summariesAnalysis}
+
+# Teams Messages Analysis
+${messagesAnalysis}
+
+# Previous Sprint Plan Analysis
+${previousPlanAnalysis}
+
+Generate a structured sprint plan with:
+1. Primary Goals (3-5 bullet points)
+2. Notes section including:
+   - What was completed from previous sprint
+   - What was NOT completed (with reasons if known)
+   - What was done EXTRA (outside the plan)
+3. Owner breakdown with tasks, story points, and acceptance criteria`;
+
+    const agentResult = await this.reactAgent.runSprintPlanAgent(systemPrompt, userMessage);
+
+    await this.agentRunRepo.addStep(runId, {
+      stepName: 'generate_final_plan',
+      startedAt: new Date(),
+      completedAt: new Date(),
+      success: true,
+    });
+
+    return agentResult.plan;
+  }
+
+  private getNextMonday(): Date {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+    const nextMonday = new Date(today);
+    nextMonday.setDate(today.getDate() + daysUntilMonday);
+    nextMonday.setHours(0, 0, 0, 0);
+    return nextMonday;
+  }
+
+  async approveAndCreateJiraTasks(sprintPlanId: string): Promise<any> {
+    this.logger.info({ sprintPlanId }, 'Approving sprint plan and creating Jira tasks');
+
+    const sprintPlan = await this.sprintPlanRepo.findById(sprintPlanId);
+    if (!sprintPlan) {
+      throw new Error(`Sprint plan ${sprintPlanId} not found`);
+    }
+
+    const jiraIssues = await this.jiraService.createIssuesForPlan(sprintPlan.planData as any);
+    await this.sprintPlanRepo.updateJiraIssues(sprintPlanId, jiraIssues.map((i: JiraIssueResult) => i.jiraIssueKey));
+    await this.sprintPlanRepo.updateStatus(sprintPlanId, 'approved');
+
+    this.logger.info({ sprintPlanId, issuesCreated: jiraIssues.length }, 'Jira tasks created');
+
+    await this.notificationService.sendApprovalConfirmation(sprintPlanId, jiraIssues.length);
+
+    return {
+      sprintPlanId,
+      jiraIssues: jiraIssues.map(i => ({ key: i.jiraIssueKey, url: i.browserUrl })),
+    };
   }
 }

@@ -183,4 +183,16 @@ export class ReactAgentService {
 
     return result.data;
   }
+
+  /**
+   * Simple LLM call without tool calling (for multi-pass analysis)
+   */
+  async callLLM(prompt: string): Promise<string> {
+    const response = await this.openaiService.chatCompletion({
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+    });
+
+    return response.choices[0]?.message?.content || '';
+  }
 }

@@ -1,48 +1,54 @@
 import { Global, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
-import { Transcript, TranscriptSchema } from './schemas/transcript.schema.js';
-import { TeamsMessage, TeamsMessageSchema } from './schemas/teams-message.schema.js';
+import { DailySummary, DailySummarySchema } from './schemas/daily-summary.schema.js';
 import { SprintPlan, SprintPlanSchema } from './schemas/sprint-plan.schema.js';
 import { AgentRun, AgentRunSchema } from './schemas/agent-run.schema.js';
-import { ContextEmbedding, ContextEmbeddingSchema } from './schemas/context-embedding.schema.js';
-import { TranscriptRepository } from './repositories/transcript.repository.js';
-import { TeamsMessageRepository } from './repositories/teams-message.repository.js';
+import { DailySummaryRepository } from './repositories/daily-summary.repository.js';
 import { SprintPlanRepository } from './repositories/sprint-plan.repository.js';
 import { AgentRunRepository } from './repositories/agent-run.repository.js';
-import { ContextEmbeddingRepository } from './repositories/context-embedding.repository.js';
+import { StandupTicketsRepository } from './repositories/standup-tickets.repository.js';
 
 @Global()
 @Module({
   imports: [
+    // Main DB (sprint_agent)
     MongooseModule.forRootAsync({
+      connectionName: 'sprint_agent',
       useFactory: (configService: ConfigService) => ({
         uri: configService.get<string>('mongodb.uri'),
         dbName: configService.get<string>('mongodb.dbName'),
       }),
       inject: [ConfigService],
     }),
-    MongooseModule.forFeature([
-      { name: Transcript.name, schema: TranscriptSchema },
-      { name: TeamsMessage.name, schema: TeamsMessageSchema },
-      { name: SprintPlan.name, schema: SprintPlanSchema },
-      { name: AgentRun.name, schema: AgentRunSchema },
-      { name: ContextEmbedding.name, schema: ContextEmbeddingSchema },
-    ]),
+    // Standup Tickets DB (read-only)
+    MongooseModule.forRootAsync({
+      connectionName: 'standuptickets',
+      useFactory: (configService: ConfigService) => ({
+        uri: configService.get<string>('mongodb.standupTicketsUri'),
+      }),
+      inject: [ConfigService],
+    }),
+    MongooseModule.forFeature(
+      [
+        { name: DailySummary.name, schema: DailySummarySchema },
+        { name: SprintPlan.name, schema: SprintPlanSchema },
+        { name: AgentRun.name, schema: AgentRunSchema },
+      ],
+      'sprint_agent',
+    ),
   ],
   providers: [
-    TranscriptRepository,
-    TeamsMessageRepository,
+    DailySummaryRepository,
     SprintPlanRepository,
     AgentRunRepository,
-    ContextEmbeddingRepository,
+    StandupTicketsRepository,
   ],
   exports: [
-    TranscriptRepository,
-    TeamsMessageRepository,
+    DailySummaryRepository,
     SprintPlanRepository,
     AgentRunRepository,
-    ContextEmbeddingRepository,
+    StandupTicketsRepository,
   ],
 })
 export class DatabaseModule {}

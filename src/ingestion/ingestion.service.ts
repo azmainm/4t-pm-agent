@@ -2,24 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PinoLogger } from 'nestjs-pino';
 import { randomUUID } from 'crypto';
-import { CalendarService } from '../graph/calendar.service.js';
-import { TranscriptService } from '../graph/transcript.service.js';
-import { TeamsChannelService } from '../graph/teams-channel.service.js';
-import { TeamsChatService } from '../graph/teams-chat.service.js';
-import { VttParserService } from '../processing/vtt-parser.service.js';
 import { SummarizationService } from '../llm/summarization.service.js';
-import { EmbeddingService } from '../processing/embedding.service.js';
-import { TranscriptRepository } from '../database/repositories/transcript.repository.js';
-import { TeamsMessageRepository } from '../database/repositories/teams-message.repository.js';
+import { StandupTicketsRepository } from '../database/repositories/standup-tickets.repository.js';
+import { DailySummaryRepository } from '../database/repositories/daily-summary.repository.js';
 import { AgentRunRepository } from '../database/repositories/agent-run.repository.js';
 import { NotificationService } from '../notification/notification.service.js';
-import type { TranscriptSegment } from '../processing/vtt-parser.service.js';
 
 export interface IngestionResult {
   runId: string;
   success: boolean;
-  transcriptProcessed: boolean;
-  messagesCount: number;
+  summaryGenerated: boolean;
+  transcriptId?: string;
   error?: string;
 }
 
@@ -28,15 +21,9 @@ export class IngestionService {
   constructor(
     private readonly configService: ConfigService,
     private readonly logger: PinoLogger,
-    private readonly calendarService: CalendarService,
-    private readonly transcriptService: TranscriptService,
-    private readonly teamsChannelService: TeamsChannelService,
-    private readonly teamsChatService: TeamsChatService,
-    private readonly vttParser: VttParserService,
     private readonly summarizationService: SummarizationService,
-    private readonly embeddingService: EmbeddingService,
-    private readonly transcriptRepo: TranscriptRepository,
-    private readonly teamsMessageRepo: TeamsMessageRepository,
+    private readonly standupTicketsRepo: StandupTicketsRepository,
+    private readonly summaryRepo: DailySummaryRepository,
     private readonly agentRunRepo: AgentRunRepository,
     private readonly notificationService: NotificationService,
   ) {
@@ -58,147 +45,124 @@ export class IngestionService {
     });
 
     try {
-      // Step 1: Fetch today's standup
-      const standupSubject = this.configService.get<string>('teams.standupSubjectFilter', 'Daily Standup');
+      // Step 1: Read today's transcript from standuptickets DB
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
 
-      this.logger.info({ runId, event: 'ingestion.calendar.fetch', date: today });
-      const events = await this.calendarService.getTodayEvents(standupSubject, today, tomorrow);
+      this.logger.info({ runId, event: 'ingestion.fetch_transcript', date: today });
+      
+      const transcript = await this.standupTicketsRepo.findByDate(today);
 
-      let transcriptProcessed = false;
-      if (events.length > 0) {
-        const standupEvent = events[0];
-        await this.agentRunRepo.addStep(runId, {
-          stepName: 'fetch_calendar',
-          startedAt: new Date(),
-          completedAt: new Date(),
+      if (!transcript) {
+        this.logger.warn({ runId, event: 'ingestion.no_transcript', date: today });
+        await this.agentRunRepo.updateStatus(runId, 'completed', {});
+        return {
+          runId,
           success: true,
-          metadata: { eventId: standupEvent.id, subject: standupEvent.subject },
-        });
-
-        // Step 2: Fetch transcript
-        this.logger.info({ runId, event: 'ingestion.transcript.fetch', eventId: standupEvent.id });
-        const meetingId = await this.transcriptService.fetchOnlineMeetingId(standupEvent.onlineMeeting?.joinUrl || '');
-        const transcriptContent = await this.transcriptService.fetchTranscript(meetingId);
-
-        if (transcriptContent) {
-          // Step 3: Parse VTT
-          const parsed = this.vttParser.parse(transcriptContent);
-          await this.agentRunRepo.addStep(runId, {
-            stepName: 'parse_transcript',
-            startedAt: new Date(),
-            completedAt: new Date(),
-            success: true,
-            metadata: { segmentCount: parsed.segments.length },
-          });
-
-          // Step 4: Save to DB
-          const transcript = await this.transcriptRepo.create({
-            date: today,
-            meetingSubject: standupEvent.subject,
-            meetingId: standupEvent.id,
-            segments: parsed.segments,
-            rawVttContent: transcriptContent,
-          });
-
-          this.logger.info({ runId, event: 'ingestion.transcript.saved', transcriptId: transcript._id });
-
-          // Step 5: Generate daily summary
-          const summary = await this.summarizationService.summarizeTranscript(parsed);
-          const summaryWithNextSteps = {
-            ...summary,
-            perPersonSummary: summary.perPersonSummary.map(p => ({
-              ...p,
-              nextSteps: p.commitments || [],
-            })),
-          };
-          await this.transcriptRepo.updateDailySummary(transcript._id.toString(), summaryWithNextSteps);
-          await this.agentRunRepo.addStep(runId, {
-            stepName: 'generate_summary',
-            startedAt: new Date(),
-            completedAt: new Date(),
-            success: true,
-          });
-
-          this.logger.info({ runId, event: 'ingestion.summary.generated', transcriptId: transcript._id });
-
-          // Step 6: Generate embeddings (optional, async)
-          this.embeddingService.generateEmbeddings(
-            parsed.segments.map((s: TranscriptSegment) => s.text),
-            'transcript',
-            today,
-            { transcriptId: transcript._id.toString() },
-          ).catch((err: Error) => {
-            this.logger.warn({ runId, error: err.message }, 'Embedding generation failed');
-          });
-
-          transcriptProcessed = true;
-        }
+          summaryGenerated: false,
+        };
       }
 
-      // Step 7: Fetch Teams messages (last 14 days)
-      const twoWeeksAgo = new Date(today);
-      twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-
-      this.logger.info({ runId, event: 'ingestion.teams_messages.fetch', startDate: twoWeeksAgo });
-      
-      const [channelMessages, chatMessages] = await Promise.all([
-        this.teamsChannelService.fetchAllChannelMessages(twoWeeksAgo, today),
-        this.teamsChatService.fetchAllChatMessages(twoWeeksAgo, today),
-      ]);
-
-      const allMessages = [...channelMessages, ...chatMessages];
-      
-      if (allMessages.length > 0) {
-        await this.teamsMessageRepo.createMany(allMessages as any);
-        await this.agentRunRepo.addStep(runId, {
-          stepName: 'fetch_teams_messages',
-          startedAt: new Date(),
-          completedAt: new Date(),
-          success: true,
-          metadata: { messageCount: allMessages.length },
-        });
-      }
-
-      this.logger.info({ runId, event: 'ingestion.teams_messages.saved', count: allMessages.length });
-
-      // Mark as completed
-      await this.agentRunRepo.updateStatus(runId, 'completed', {
-        stats: {
-          transcriptsFetched: transcriptProcessed ? 1 : 0,
-          messagesFetched: allMessages.length,
-          summariesGenerated: transcriptProcessed ? 1 : 0,
-          durationMs: Date.now() - startedAt.getTime(),
-        },
+      await this.agentRunRepo.addStep(runId, {
+        stepName: 'fetch_transcript',
+        startedAt: new Date(),
+        completedAt: new Date(),
+        success: true,
+        metadata: { transcriptId: transcript._id, segmentCount: transcript.transcript_data.length },
       });
 
-      this.logger.info({ runId, event: 'ingestion.completed' });
+      this.logger.info({ runId, transcriptId: transcript._id, event: 'ingestion.transcript.found' });
+
+      // Step 2: Check if summary already exists
+      const existingSummary = await this.summaryRepo.findByDate(today);
+      if (existingSummary) {
+        this.logger.info({ runId, event: 'ingestion.summary.exists' });
+        await this.agentRunRepo.updateStatus(runId, 'completed', {});
+        return {
+          runId,
+          success: true,
+          summaryGenerated: false,
+          transcriptId: transcript._id,
+        };
+      }
+
+      // Step 3: Generate summary using GPT
+      this.logger.info({ runId, event: 'ingestion.summary.start' });
+      
+      const summary = await this.summarizationService.summarizeTranscript({
+        segments: transcript.transcript_data.map((seg, index) => ({
+          speaker: seg.speaker,
+          timestamp: seg.timestamp,
+          text: seg.text,
+          startTime: seg.timestamp,
+          endTime: seg.timestamp,
+        })) as any, // Cast to bypass type check - data is compatible
+        participants: [],
+      });
+
+      await this.agentRunRepo.addStep(runId, {
+        stepName: 'generate_summary',
+        startedAt: new Date(),
+        completedAt: new Date(),
+        success: true,
+        metadata: { model: 'gpt-5-nano' },
+      });
+
+      // Step 4: Save summary to sprint_agent DB
+      const savedSummary = await this.summaryRepo.create({
+        date: today,
+        transcriptId: transcript._id,
+        overallSummary: summary.overallSummary,
+        actionItems: summary.actionItems,
+        decisions: summary.decisions,
+        blockers: summary.blockers,
+        perPersonSummary: summary.perPersonSummary.map(p => ({
+          name: p.person,
+          summary: p.progressItems.join('; '),
+          nextSteps: p.commitments,
+        })),
+        generatedAt: new Date(),
+      });
+
+      await this.agentRunRepo.addStep(runId, {
+        stepName: 'save_summary',
+        startedAt: new Date(),
+        completedAt: new Date(),
+        success: true,
+        metadata: { summaryId: savedSummary._id.toString() },
+      });
+
+      this.logger.info({
+        runId,
+        transcriptId: transcript._id,
+        summaryId: savedSummary._id.toString(),
+        event: 'ingestion.summary.saved',
+      });
+
+      // Mark as completed
+      await this.agentRunRepo.updateStatus(runId, 'completed', {});
 
       return {
         runId,
         success: true,
-        transcriptProcessed,
-        messagesCount: allMessages.length,
+        summaryGenerated: true,
+        transcriptId: transcript._id,
       };
     } catch (error) {
-      this.logger.error({ runId, error: error.message, stack: error.stack }, 'Ingestion failed');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error({ runId, error: errorMessage }, 'Daily ingestion failed');
 
       await this.agentRunRepo.updateStatus(runId, 'failed', {
-        error: error.message,
+        error: errorMessage,
       });
 
-      // Send Teams notification
-      await this.notificationService.sendError('Daily Ingestion', error.message, runId);
+      await this.notificationService.sendError('Daily Ingestion', errorMessage, runId);
 
       return {
         runId,
         success: false,
-        transcriptProcessed: false,
-        messagesCount: 0,
-        error: error.message,
+        summaryGenerated: false,
+        error: errorMessage,
       };
     }
   }

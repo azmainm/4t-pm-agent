@@ -10,7 +10,6 @@ import { NotificationModule } from '../notification/notification.module.js';
 
 @Module({
   imports: [
-    ProcessingModule,
     LlmModule,
     DocxModule,
     GraphModule,

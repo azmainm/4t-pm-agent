@@ -17,6 +17,7 @@ export const validationSchema = Joi.object({
   // MongoDB
   MONGODB_URI: Joi.string().required(),
   MONGODB_DB_NAME: Joi.string().default('sprint_agent'),
+  STANDUPTICKETS_MONGODB_URI: Joi.string().required(),
 
   // OpenAI
   OPENAI_API_KEY: Joi.string().required(),

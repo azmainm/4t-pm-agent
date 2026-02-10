@@ -10,6 +10,7 @@ export interface JiraIssueResult {
   assignee: string;
   summary: string;
   status: string;
+  browserUrl?: string;
 }
 
 @Injectable()

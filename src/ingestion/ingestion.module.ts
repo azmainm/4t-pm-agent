@@ -7,7 +7,7 @@ import { LlmModule } from '../llm/llm.module.js';
 import { NotificationModule } from '../notification/notification.module.js';
 
 @Module({
-  imports: [GraphModule, ProcessingModule, LlmModule, NotificationModule],
+  imports: [LlmModule, NotificationModule],
   controllers: [IngestionController],
   providers: [IngestionService],
   exports: [IngestionService],

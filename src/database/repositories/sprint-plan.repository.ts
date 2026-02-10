@@ -6,7 +6,7 @@ import { SprintPlan } from '../schemas/sprint-plan.schema.js';
 @Injectable()
 export class SprintPlanRepository {
   constructor(
-    @InjectModel(SprintPlan.name)
+    @InjectModel(SprintPlan.name, 'sprint_agent')
     private readonly sprintPlanModel: Model<SprintPlan>,
   ) {}
 
