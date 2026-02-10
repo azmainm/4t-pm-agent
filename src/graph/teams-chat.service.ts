@@ -34,14 +34,25 @@ export class TeamsChatService {
 
   async fetchRecentMessages(daysBack: number): Promise<TeamsChatMessageData[]> {
     const targetUserId = this.configService.get<string>('azure.targetUserId')!;
-    const chatIds = this.configService.get<string[]>('teams.chatIds')!;
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysBack);
 
+    // First, get ALL chats for the user
+    this.logger.info({ targetUserId }, 'Fetching all chats for user');
+    const chatsResponse = await this.graphClient
+      .getClient()
+      .api(`/users/${targetUserId}/chats`)
+      .get();
+
+    const chats = chatsResponse.value || [];
+    this.logger.info({ chatCount: chats.length }, 'Found chats');
+
     const allMessages: TeamsChatMessageData[] = [];
 
-    for (const chatId of chatIds) {
-      this.logger.info({ chatId, daysBack }, 'Fetching chat messages');
+    for (const chat of chats) {
+      const chatId = chat.id;
+      const chatName = chat.topic || 'Unnamed Chat';
+      this.logger.info({ chatId, chatName, daysBack }, 'Fetching chat messages');
 
       try {
         const messages = await this.fetchChatMessages(

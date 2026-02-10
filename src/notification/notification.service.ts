@@ -11,7 +11,7 @@ export class NotificationService {
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext('NotificationService');
-    this.webhookUrl = this.configService.get<string>('teams.webhookUrl')!;
+    this.webhookUrl = this.configService.get<string>('teams.webhookUrl') || '';
   }
 
   async sendSprintPlanReady(
@@ -155,6 +155,11 @@ export class NotificationService {
   }
 
   private async postToWebhook(payload: unknown): Promise<void> {
+    if (!this.webhookUrl) {
+      this.logger.warn('Teams webhook URL not configured, skipping notification');
+      return;
+    }
+
     const response = await fetch(this.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -185,9 +185,23 @@ export class SprintPlanService {
       const sprintPlansFolderId = this.configService.get<string>('onedrive.sprintPlansFolderId')!;
       const uploadResult = await this.onedriveService.uploadFile(sprintPlansFolderId, fileName, docxBuffer);
 
-      if (previousPlan?.onedriveFileId) {
+      // Archive previous plan (both .docx and .md files)
+      if (previousPlan?.onedriveFileName) {
         const archiveFolderId = this.configService.get<string>('onedrive.archiveFolderId')!;
-        await this.onedriveService.moveItem(previousPlan.onedriveFileId, archiveFolderId);
+        const baseName = previousPlan.onedriveFileName.replace(/\.docx$/, '');
+        
+        // Get all files in sprint plans folder
+        const allFiles = await this.onedriveService.listFolder(sprintPlansFolderId);
+        
+        // Find and move both .docx and .md files matching the previous plan
+        const filesToArchive = allFiles.filter(
+          (file) => file.name.startsWith(baseName) && (file.name.endsWith('.docx') || file.name.endsWith('.md')),
+        );
+        
+        for (const file of filesToArchive) {
+          await this.onedriveService.moveItem(file.id, archiveFolderId);
+          this.logger.info({ fileId: file.id, fileName: file.name }, 'Archived old sprint plan file');
+        }
       }
 
       await this.sprintPlanRepo.updateOnedriveFile(

@@ -31,15 +31,13 @@ export const validationSchema = Joi.object({
   JIRA_BOARD_ID: Joi.number().required(),
 
   // Teams
-  TEAMS_WEBHOOK_URL: Joi.string().uri().required(),
+  TEAMS_WEBHOOK_URL: Joi.string().uri().allow('').optional(),
   TEAMS_TEAM_ID: Joi.string().required(),
-  TEAMS_CHANNEL_IDS: Joi.string().required(),
-  TEAMS_CHAT_IDS: Joi.string().allow('').default(''),
   TEAMS_STANDUP_SUBJECT_FILTER: Joi.string().default('Daily Standup'),
 
   // OneDrive
-  ONEDRIVE_SPRINT_PLANS_FOLDER_ID: Joi.string().required(),
-  ONEDRIVE_ARCHIVE_FOLDER_ID: Joi.string().required(),
+  ONEDRIVE_SPRINT_PLANS_FOLDER_ID: Joi.string().allow('').optional(),
+  ONEDRIVE_ARCHIVE_FOLDER_ID: Joi.string().allow('').optional(),
 
   // Team Roster
   TEAM_ROSTER: Joi.string().required(),

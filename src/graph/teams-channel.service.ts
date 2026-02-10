@@ -35,14 +35,26 @@ export class TeamsChannelService {
 
   async fetchRecentMessages(daysBack: number): Promise<TeamsMessageData[]> {
     const teamId = this.configService.get<string>('teams.teamId')!;
-    const channelIds = this.configService.get<string[]>('teams.channelIds')!;
+    const targetUserId = this.configService.get<string>('azure.targetUserId')!;
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysBack);
 
+    // First, get ALL channels in the team
+    this.logger.info({ teamId }, 'Fetching all channels in team');
+    const channelsResponse = await this.graphClient
+      .getClient()
+      .api(`/teams/${teamId}/channels`)
+      .get();
+
+    const channels = channelsResponse.value || [];
+    this.logger.info({ channelCount: channels.length }, 'Found channels');
+
     const allMessages: TeamsMessageData[] = [];
 
-    for (const channelId of channelIds) {
-      this.logger.info({ channelId, daysBack }, 'Fetching channel messages');
+    for (const channel of channels) {
+      const channelId = channel.id;
+      const channelName = channel.displayName;
+      this.logger.info({ channelId, channelName, daysBack }, 'Fetching channel messages');
 
       try {
         const messages = await this.fetchChannelMessages(
