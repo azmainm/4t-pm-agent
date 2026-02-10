@@ -75,4 +75,12 @@ export class SprintPlanRepository {
   async findById(id: string): Promise<SprintPlan | null> {
     return this.sprintPlanModel.findById(id).exec();
   }
+
+  async findAll(limit = 20): Promise<SprintPlan[]> {
+    return this.sprintPlanModel
+      .find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .exec();
+  }
 }

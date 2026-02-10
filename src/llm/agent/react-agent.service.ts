@@ -190,7 +190,7 @@ export class ReactAgentService {
   async callLLM(prompt: string): Promise<string> {
     const response = await this.openaiService.chatCompletion({
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
+      // temperature: 0.3, // gpt-5-nano only supports default temperature (1)
     });
 
     return response.choices[0]?.message?.content || '';

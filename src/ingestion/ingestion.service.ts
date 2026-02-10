@@ -89,8 +89,13 @@ export class IngestionService {
       // Step 3: Generate summary using GPT
       this.logger.info({ runId, event: 'ingestion.summary.start' });
       
+      // Ensure transcript_data is an array (should be parsed by repo)
+      const transcriptData = Array.isArray(transcript.transcript_data) 
+        ? transcript.transcript_data 
+        : [];
+      
       const summary = await this.summarizationService.summarizeTranscript({
-        segments: transcript.transcript_data.map((seg, index) => ({
+        segments: transcriptData.map((seg: any) => ({
           speaker: seg.speaker,
           timestamp: seg.timestamp,
           text: seg.text,

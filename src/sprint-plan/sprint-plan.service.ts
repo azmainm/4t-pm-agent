@@ -399,6 +399,37 @@ Generate a structured sprint plan with:
     return nextMonday;
   }
 
+  async listSprintPlans(limit = 20): Promise<any[]> {
+    this.logger.info({ limit }, 'Listing sprint plans');
+    
+    const plans = await this.sprintPlanRepo.findAll(limit);
+    
+    return plans.map(plan => {
+      // Calculate total tasks from planData
+      const totalTasks = plan.planData?.ownerBreakdown?.reduce(
+        (sum, owner) => sum + (owner.focuses?.reduce(
+          (focusSum, focus) => focusSum + (focus.tasks?.length || 0),
+          0
+        ) || 0),
+        0
+      ) || 0;
+
+      return {
+        id: plan._id.toString(),
+        sprintStartDate: plan.sprintStartDate,
+        sprintEndDate: plan.sprintEndDate,
+        status: plan.status,
+        createdAt: (plan as any).createdAt || plan.sprintStartDate,
+        approvedAt: plan.approvedAt,
+        jiraIssueKeys: plan.jiraIssueKeys || [],
+        onedriveFileName: plan.onedriveFileName,
+        primaryGoals: plan.planData?.primaryGoals || [],
+        notes: plan.planData?.notes || [],
+        totalTasks,
+      };
+    });
+  }
+
   async approveAndCreateJiraTasks(sprintPlanId: string): Promise<any> {
     this.logger.info({ sprintPlanId }, 'Approving sprint plan and creating Jira tasks');
 

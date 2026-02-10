@@ -7,7 +7,7 @@ export interface StandupTranscript {
   _id: string;
   timestamp: Date;
   date: string;
-  transcript_data: Array<{
+  transcript_data: string | Array<{
     speaker: string;
     timestamp: string;
     text: string;
@@ -44,21 +44,37 @@ export class StandupTicketsRepository {
 
   async findByDateRange(startDate: Date, endDate: Date): Promise<StandupTranscript[]> {
     await this.ensureConnected();
-    return this.transcriptsCollection
+    const results = await this.transcriptsCollection
       .find({
         timestamp: { $gte: startDate, $lte: endDate },
       })
       .sort({ timestamp: 1 })
       .toArray();
+    
+    return results.map(t => this.parseTranscript(t));
+  }
+
+  private parseTranscript(transcript: any): StandupTranscript {
+    if (typeof transcript.transcript_data === 'string') {
+      try {
+        transcript.transcript_data = JSON.parse(transcript.transcript_data);
+      } catch (e) {
+        this.logger.error({ error: e.message }, 'Failed to parse transcript_data');
+        transcript.transcript_data = [];
+      }
+    }
+    return transcript as StandupTranscript;
   }
 
   async findLatest(limit: number): Promise<StandupTranscript[]> {
     await this.ensureConnected();
-    return this.transcriptsCollection
+    const results = await this.transcriptsCollection
       .find()
       .sort({ timestamp: -1 })
       .limit(limit)
       .toArray();
+    
+    return results.map(t => this.parseTranscript(t));
   }
 
   async findByDate(date: Date): Promise<StandupTranscript | null> {
@@ -68,9 +84,11 @@ export class StandupTicketsRepository {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    return this.transcriptsCollection.findOne({
+    const result = await this.transcriptsCollection.findOne({
       timestamp: { $gte: startOfDay, $lte: endOfDay },
     });
+    
+    return result ? this.parseTranscript(result) : null;
   }
 
   private async ensureConnected() {

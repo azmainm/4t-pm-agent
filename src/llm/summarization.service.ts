@@ -52,11 +52,12 @@ export class SummarizationService {
         { role: 'user', content: transcriptText },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.2,
+      // temperature: 0.2, // gpt-5-nano only supports default temperature (1)
     });
 
     const content = response.choices[0].message.content || '{}';
-    const parsed = JSON.parse(content);
+    // Handle both string (JSON) and already-parsed object responses
+    const parsed = typeof content === 'string' ? JSON.parse(content) : content;
 
     this.logger.info(
       {

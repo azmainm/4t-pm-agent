@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, Get } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 import { SprintPlanService } from './sprint-plan.service.js';
 import { successResponse, errorResponse } from '../common/dto/api-response.dto.js';
@@ -11,6 +11,19 @@ export class SprintPlanController {
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext('SprintPlanController');
+  }
+
+  @Get('list')
+  async listSprintPlans(): Promise<ApiResponse> {
+    this.logger.info('Listing sprint plans');
+    
+    try {
+      const plans = await this.sprintPlanService.listSprintPlans();
+      return successResponse(plans);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to list sprint plans';
+      return errorResponse(message);
+    }
   }
 
   @Post('generate')
