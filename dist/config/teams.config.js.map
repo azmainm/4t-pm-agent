@@ -1,0 +1,1 @@
+{"version":3,"file":"teams.config.js","sourceRoot":"","sources":["../../src/config/teams.config.ts"],"names":[],"mappings":";;;AAAA,2CAA4C;AAE/B,QAAA,WAAW,GAAG,IAAA,mBAAU,EAAC,OAAO,EAAE,GAAG,EAAE,CAAC,CAAC;IACpD,UAAU,EAAE,OAAO,CAAC,GAAG,CAAC,iBAAiB,IAAI,EAAE;IAC/C,MAAM,EAAE,OAAO,CAAC,GAAG,CAAC,aAAc;IAClC,oBAAoB,EAClB,OAAO,CAAC,GAAG,CAAC,4BAA4B,IAAI,eAAe;CAC9D,CAAC,CAAC,CAAC"}

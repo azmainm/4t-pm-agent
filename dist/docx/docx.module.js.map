@@ -1,0 +1,1 @@
+{"version":3,"file":"docx.module.js","sourceRoot":"","sources":["../../src/docx/docx.module.ts"],"names":[],"mappings":";;;;;;;;;AAAA,2CAAwC;AACxC,2EAAmE;AAM5D,IAAM,UAAU,GAAhB,MAAM,UAAU;CAAG,CAAA;AAAb,gCAAU;qBAAV,UAAU;IAJtB,IAAA,eAAM,EAAC;QACN,SAAS,EAAE,CAAC,gDAAoB,CAAC;QACjC,OAAO,EAAE,CAAC,gDAAoB,CAAC;KAChC,CAAC;GACW,UAAU,CAAG"}

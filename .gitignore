@@ -1,5 +1,5 @@
 # compiled output
-/dist
+# /dist  # Uncommenting to commit dist for Render free tier
 /node_modules
 
 # Logs
