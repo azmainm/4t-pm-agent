@@ -1,227 +1,388 @@
-# Sprint Planning Agent
+# PM Agent - Automated Sprint Planning System
 
-Autonomous agent that ingests Teams meeting transcripts, channel/chat messages, and the previous sprint plan across a 2-week sprint cycle to generate sprint plans and developer tasks.
+> Intelligent sprint planning automation that transforms daily standup transcripts into comprehensive sprint plans with seamless Jira integration.
 
-## Features
+[![NestJS](https://img.shields.io/badge/NestJS-E0234E?style=flat&logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat&logo=openai&logoColor=white)](https://openai.com/)
 
-- **Daily Ingestion (Mon-Fri at 2 PM PST)**
-  - Fetches daily standup transcripts from Teams
-  - Pulls Teams channel and chat messages (last 14 days)
-  - Generates AI summaries of each standup using GPT-5-nano
-  - Stores everything in MongoDB for sprint analysis
+---
 
-- **Weekly Sprint Plan Generation (Wednesday 10 PM PST)**
-  - Loads 2 weeks of data: 8 transcripts + messages + previous sprint plan
-  - Uses GPT-5-nano with ReAct agent pattern to analyze and generate plan
-  - Compares actual work vs. previous sprint plan
-  - Generates structured Word document with:
-    - Sprint goals
-    - Per-person task breakdown with points and acceptance criteria
-    - Previous sprint review (completed/not completed/extra work)
-  - Uploads to OneDrive and archives previous plan
-  - Creates approval workflow via Teams notification
-  - Auto-creates Jira tasks upon approval
+## 🎯 Overview
 
-## Architecture
+PM Agent automates the entire sprint planning workflow for software development teams:
 
-Built with NestJS (TypeScript) following a clean, modular architecture:
+1. **Daily Ingestion** (Mon-Fri) - Reads standup transcripts, generates AI-powered summaries
+2. **Sprint Plan Generation** (Fridays) - Creates comprehensive 2-week sprint plans
+3. **Admin Approval** - Review and approve via web interface
+4. **Jira Integration** - Automatically creates and assigns tasks
+
+**Result:** Sprint planning reduced from hours to minutes, with better context and consistency.
+
+---
+
+## ✨ Features
+
+### Core Capabilities
+- 🤖 **AI-Powered Summarization** - GPT-5-nano generates daily standup summaries
+- 📊 **Intelligent Sprint Planning** - Multi-pass analysis of summaries, Teams messages, and previous plans
+- 📝 **Document Management** - Generates DOCX files, uploads to OneDrive, archives old plans
+- ✅ **Jira Integration** - Creates tasks with assignees, story points, and acceptance criteria
+- 💬 **Teams Notifications** - Sends approval requests and confirmations
+- 🎨 **Admin Panel** - Web interface for reviewing and approving sprint plans
+
+### Technical Features
+- 🔄 **Automated Scheduling** - GitHub Actions triggers daily/weekly workflows
+- 🗄️ **MongoDB Storage** - Persistent data for summaries and sprint plans
+- 🔐 **Microsoft Graph API** - Reads Teams messages, manages OneDrive files
+- 📊 **Structured Logging** - Pino logger with request tracing
+- 🛡️ **API Key Auth** - Secure endpoint protection
+
+---
+
+## 🏗️ Architecture
 
 ```
-src/
-├── config/          # Configuration (Azure, OpenAI, Jira, Teams, OneDrive)
-├── database/        # MongoDB schemas & repositories
-├── auth/            # MS Graph authentication (MSAL)
-├── graph/           # MS Graph API connectors (Calendar, Transcripts, Teams, OneDrive)
-├── processing/      # VTT parsing, docx parsing, context building, embeddings
-├── llm/             # OpenAI integration, summarization, ReAct agent
-├── docx/            # Word document generation
-├── jira/            # Jira REST API integration
-├── notification/    # Teams webhook notifications
-├── ingestion/       # Daily ingestion orchestration
-├── sprint-plan/     # Sprint plan generation orchestration
-└── common/          # Guards, interceptors, filters, utilities
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Standup        │────▶│   PM Agent       │────▶│   Sprint Plan   │
+│  Transcripts    │     │   (NestJS API)   │     │   (MongoDB)     │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                               │
+                               ├──▶ GPT-5-nano (Summarization)
+                               ├──▶ Teams (Read messages)
+                               ├──▶ OneDrive (Documents)
+                               └──▶ Jira (Create tasks)
+
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  GitHub Actions │────▶│   Triggers       │────▶│  Admin Panel    │
+│  (Scheduled)    │     │   (Webhooks)     │     │  (Approval)     │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
 ```
 
-## Prerequisites
+**Data Flow:**
+1. Daily standup transcript → Read from MongoDB
+2. GPT-5-nano → Generate summary
+3. Summary → Save to MongoDB
+4. Friday → Analyze last 10 summaries + Teams messages + previous plan
+5. GPT-5-nano → Generate sprint plan
+6. OneDrive → Upload DOCX, archive old files
+7. Teams → Send notification
+8. Admin → Approve plan
+9. Jira → Create tasks automatically
 
-1. **Azure AD App Registration**
-   - Required MS Graph permissions:
-     - `Calendars.Read`
-     - `OnlineMeetings.Read.All`
-     - `OnlineMeetingTranscript.Read.All`
-     - `ChannelMessage.Read.All`
-     - `Chat.Read`
-     - `Files.ReadWrite`
-   - Admin consent required for application permissions
+---
 
-2. **MongoDB Atlas Cluster**
-   - Free tier works for development
-   - Database name: `sprint_agent`
+## 🚀 Quick Start
 
-3. **OpenAI API Key**
-   - Access to GPT-5-nano model
+### Prerequisites
+- Node.js 18+
+- MongoDB Atlas account
+- Azure AD app registration (for Teams/OneDrive)
+- Jira Cloud account
+- OpenAI API key
 
-4. **Jira Cloud Account**
-   - API token for issue creation
-   - Project key and board ID
-
-5. **Teams Webhook URL**
-   - For error alerts and sprint plan notifications
-
-6. **OneDrive Folder IDs**
-   - Sprint plans folder ID
-   - Archive folder ID
-
-## Installation
+### Installation
 
 ```bash
+# Clone repository
+git clone <your-repo-url>
+cd pm-agent
+
 # Install dependencies
 npm install
 
 # Copy environment template
 cp .env.template .env
+# Edit .env with your credentials
 
-# Fill in .env with your credentials (see .env.template)
-
-# Run in development mode
-npm run start:dev
-
-# Build for production
+# Build
 npm run build
 
-# Start production
-npm run start:prod
+# Start
+npm start
 ```
 
-## Environment Variables
+The API will be available at `http://localhost:3000`
 
-See `.env.template` for all required variables. Key sections:
-
-- **Azure/MS Graph**: Tenant ID, Client ID, Client Secret, Target User ID
-- **MongoDB**: Connection URI and database name
-- **OpenAI**: API key and model name (gpt-5-nano)
-- **Jira**: Host, email, API token, project key, board ID
-- **Teams**: Webhook URL, team ID, channel IDs, chat IDs, standup subject filter
-- **OneDrive**: Sprint plans folder ID, archive folder ID
-- **Team Roster**: JSON array of team members with Jira account IDs
-
-## API Endpoints
-
-All endpoints require API key authentication via `x-api-key` header.
-
-### Health Check (Public)
-```bash
-GET /health
-```
-
-### Trigger Daily Ingestion
-```bash
-POST /api/ingestion/run
-Headers: x-api-key: <your-api-key>
-```
-
-### Generate Sprint Plan
-```bash
-POST /api/sprint-plan/generate
-Headers: x-api-key: <your-api-key>
-```
-
-### Approve Sprint Plan & Create Jira Tasks
-```bash
-POST /api/sprint-plan/approve
-Headers: x-api-key: <your-api-key>
-Body: { "sprintPlanId": "<sprint-plan-id>" }
-```
-
-## Scheduling
-
-For production deployment, set up cron jobs or scheduled tasks:
-
-### Option 1: GitHub Actions
-```yaml
-# .github/workflows/daily-ingestion.yml
-on:
-  schedule:
-    - cron: '0 22 * * 1-5'  # 2 PM PST (UTC+8)
-
-# .github/workflows/sprint-plan.yml
-on:
-  schedule:
-    - cron: '0 6 * * 4'  # 10 PM PST Wednesday (UTC+8)
-```
-
-### Option 2: Server Cron
-```bash
-# Daily ingestion at 2 PM PST
-0 14 * * 1-5 curl -X POST -H "x-api-key: $API_KEY" https://your-domain/api/ingestion/run
-
-# Sprint plan at 10 PM PST Wednesday
-0 22 * * 3 curl -X POST -H "x-api-key: $API_KEY" https://your-domain/api/sprint-plan/generate
-```
-
-### Option 3: Add to NestJS app
-Uncomment scheduler module in `app.module.ts` and use `@Cron()` decorators.
-
-## Deployment
-
-### Option 1: Render.com
-1. Connect GitHub repo
-2. Select "Web Service"
-3. Build command: `npm install && npm run build`
-4. Start command: `npm run start:prod`
-5. Add environment variables from `.env.template`
-6. Use paid tier to avoid cold starts for cron triggers
-
-### Option 2: Azure App Service
-1. Create App Service (Node.js)
-2. Deploy via GitHub Actions or Azure CLI
-3. Configure environment variables in App Settings
-4. Set up Application Insights for monitoring
-
-### Option 3: Docker
-```bash
-docker build -t pm-agent .
-docker run -p 3000:3000 --env-file .env pm-agent
-```
-
-## Monitoring & Observability
-
-- **Structured logging**: Pino JSON logs with request IDs
-- **Agent runs**: Every execution stored in `agentRuns` collection with step-by-step timing
-- **Teams alerts**: Failed runs automatically notify via webhook
-- **Key metrics**: LLM token usage, API call counts, execution duration
-
-## Development
+### Verify Setup
 
 ```bash
-# Run tests
+# Check health
+curl http://localhost:3000/api/health
+
+# Test daily ingestion
+curl -X POST -H "x-api-key: your-api-key" http://localhost:3000/api/ingestion/run
+
+# Test sprint plan generation
+curl -X POST -H "x-api-key: your-api-key" http://localhost:3000/api/sprint-plan/generate
+```
+
+---
+
+## 📋 API Endpoints
+
+### Ingestion
+- `POST /api/ingestion/run` - Run daily ingestion
+
+### Sprint Planning
+- `POST /api/sprint-plan/generate` - Generate sprint plan
+- `GET /api/sprint-plan/list` - List all sprint plans
+- `POST /api/sprint-plan/approve` - Approve sprint plan
+
+### Health
+- `GET /api/health` - Health check
+
+**Authentication:** All endpoints require `x-api-key` header.
+
+---
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+See `.env.template` for all required variables:
+
+- **Azure AD**: Tenant ID, Client ID, Client Secret
+- **MongoDB**: Connection strings for both databases
+- **OpenAI**: API key and model selection
+- **Jira**: Host, email, API token, project key
+- **Teams**: Webhook URL, team ID
+- **OneDrive**: Folder IDs for sprint plans and archive
+- **Team Roster**: JSON array of team members with Jira IDs
+
+### Team Roster Format
+
+```json
+[
+  {
+    "name": "John Doe",
+    "jiraAccountId": "712020:...",
+    "role": "Lead"
+  }
+]
+```
+
+---
+
+## 🔄 Automated Workflows
+
+### Daily Ingestion (Mon-Fri @ 2 PM PST)
+
+GitHub Action triggers → Calls `/api/ingestion/run`
+
+**What it does:**
+1. Fetches latest standup transcript from MongoDB
+2. Generates summary using GPT-5-nano
+3. Saves summary to `sprint_agent` database
+4. Logs completion
+
+### Weekly Sprint Plan (Fri @ 2 PM PST)
+
+GitHub Action triggers → Calls `/api/sprint-plan/generate`
+
+**What it does:**
+1. Fetches last 10 daily summaries
+2. Reads Teams channel messages (last 14 days)
+3. Downloads previous sprint plan from OneDrive
+4. Runs multi-pass GPT-5-nano analysis
+5. Generates comprehensive sprint plan
+6. Creates DOCX document
+7. Uploads to OneDrive, archives old files
+8. Saves plan to MongoDB
+9. Sends Teams notification for approval
+
+### Manual Approval (After Notification)
+
+Admin opens web panel → Reviews plan → Clicks "Approve"
+
+**What it does:**
+1. Creates Jira tasks for all plan items
+2. Assigns tasks to team members
+3. Sets task status to "TO DO"
+4. Adds tasks to active sprint
+5. Sends Teams confirmation
+6. Updates plan status to "approved"
+
+---
+
+## 📦 Tech Stack
+
+### Backend
+- **Framework**: NestJS 10
+- **Language**: TypeScript
+- **Runtime**: Node.js 18+
+
+### Database
+- **Primary**: MongoDB Atlas
+- **Schema**: Mongoose ODM
+- **Collections**: `dailySummaries`, `sprintPlans`, `agentRuns`
+
+### AI/LLM
+- **Provider**: OpenAI
+- **Model**: GPT-5-nano (Responses API)
+- **Use Cases**: Summarization, sprint plan generation
+
+### Integrations
+- **Microsoft Graph API**: Teams messages, OneDrive files
+- **Jira Cloud API**: Task creation, sprint management
+- **Teams Webhooks**: Notifications
+
+### DevOps
+- **CI/CD**: GitHub Actions
+- **Hosting**: Render.com (or Railway, Azure)
+- **Logging**: Pino structured JSON logs
+
+---
+
+## 📚 Documentation
+
+- **[Deployment Guide](./docs/DEPLOYMENT.md)** - Deploy to Render with GitHub Actions
+- **[API Setup](./docs/API_SETUP_GUIDE.md)** - Detailed API configuration
+- **[Architecture](./docs/END_TO_END_ARCHITECTURE.md)** - Complete system design
+- **[Test Results](./docs/TEST_RESULTS.md)** - Comprehensive testing documentation
+- **[Test Evidence](./docs/DETAILED_TEST_EVIDENCE.md)** - Step-by-step verification
+
+---
+
+## 🚢 Deployment
+
+### Quick Deploy to Render
+
+1. **Create Web Service on Render**
+   - Build Command: `npm install && npm run build`
+   - Start Command: `npm start`
+   - Add all environment variables from `.env`
+
+2. **Setup GitHub Actions**
+   - Add secrets: `PM_AGENT_API_URL`, `PM_AGENT_API_KEY`
+   - Enable workflows in Actions tab
+
+3. **Test**
+   - Manually trigger "Daily Ingestion" workflow
+   - Verify logs show success
+
+**See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for detailed instructions.**
+
+---
+
+## 🧪 Testing
+
+### Run Tests
+
+```bash
+# Unit tests
 npm test
 
-# Run e2e tests
+# E2E tests
 npm run test:e2e
 
-# Lint and format
-npm run lint
-npm run format
-
-# Type check
-npm run build
+# Test coverage
+npm run test:cov
 ```
 
-## Troubleshooting
+### Manual Testing
 
-**Transcripts not available**: Wait 4+ hours after standup for Teams to process transcripts.
+```bash
+# Test daily ingestion
+npm run test:ingestion
 
-**Graph API 403 errors**: Verify admin consent is granted for all required permissions.
+# Test sprint plan generation
+npm run test:sprint-plan
+```
 
-**Context too large**: Ensure daily summarization is working. Check `dailySummary` field in transcripts.
+---
 
-**Jira creation fails**: Verify team member names match Jira account IDs in roster config.
+## 🛠️ Development
 
-## License
+### Project Structure
 
-MIT
+```
+src/
+├── auth/              # MS Graph authentication
+├── common/            # Shared utilities, guards, filters
+├── config/            # Configuration modules
+├── database/          # MongoDB repositories and schemas
+├── docx/              # DOCX generation service
+├── graph/             # Microsoft Graph API services
+├── ingestion/         # Daily ingestion logic
+├── jira/              # Jira integration
+├── llm/               # OpenAI services, agent logic
+├── notification/      # Teams notification service
+├── sprint-plan/       # Sprint planning service
+└── main.ts            # Application entry point
+```
 
-## Support
+### Code Style
 
-For issues or questions, contact your team's dev lead or create an issue in the repo.
+- ESLint + Prettier configured
+- Run `npm run lint` before committing
+- Run `npm run format` to auto-fix
+
+### Git Workflow
+
+```bash
+# Create feature branch
+git checkout -b feature/your-feature
+
+# Commit changes
+git add .
+git commit -m "feat: your feature description"
+
+# Push and create PR
+git push origin feature/your-feature
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**MongoDB connection fails:**
+- Verify connection strings in `.env`
+- Check MongoDB Atlas IP whitelist (allow all: `0.0.0.0/0`)
+- Ensure network access is enabled
+
+**Azure AD authentication fails:**
+- Verify tenant ID, client ID, client secret
+- Check API permissions are granted and admin consented
+- Ensure `ChannelSettings.Read.All` and `Files.ReadWrite.All` are added
+
+**Jira task creation fails:**
+- Verify Jira account ID format in team roster
+- Check project key and board ID are correct
+- Ensure API token has write permissions
+
+**GPT-5-nano responses are invalid:**
+- Check API key is valid
+- Verify model name is exactly `gpt-5-nano`
+- Check OpenAI API rate limits
+
+---
+
+## 📝 License
+
+Proprietary - 4Trades.ai
+
+---
+
+## 👥 Team
+
+- **Azmain Morshed** - Lead Developer
+- **Shafkat Kabir** - Developer
+- **Faiyaz Rahman** - Developer
+
+---
+
+## 🆘 Support
+
+For issues or questions:
+1. Check [documentation](./docs/)
+2. Review [test results](./docs/TEST_RESULTS.md)
+3. Check Render logs for errors
+4. Contact team lead
+
+---
+
+**Built with ❤️ by 4Trades.ai**

@@ -1,0 +1,69 @@
+name: Weekly Sprint Plan Generation
+
+on:
+  schedule:
+    # Runs every Friday at 2 PM PST (10 PM UTC)
+    - cron: '0 22 * * 5'
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  generate-sprint-plan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate Sprint Plan
+        env:
+          PM_AGENT_URL: ${{ secrets.PM_AGENT_URL }}
+          PM_AGENT_API_KEY: ${{ secrets.PM_AGENT_API_KEY }}
+        run: |
+          echo "Generating weekly sprint plan at $(date)"
+          
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "x-api-key: ${PM_AGENT_API_KEY}" \
+            "${PM_AGENT_URL}/api/sprint-plan/generate")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Response code: $http_code"
+          echo "Response body: $body"
+          
+          if [ "$http_code" -ne 201 ] && [ "$http_code" -ne 200 ]; then
+            echo "❌ Sprint plan generation failed with HTTP $http_code"
+            exit 1
+          fi
+          
+          success=$(echo "$body" | jq -r '.success')
+          
+          if [ "$success" = "true" ]; then
+            echo "✅ Sprint plan generated successfully"
+            run_id=$(echo "$body" | jq -r '.data.runId')
+            sprint_plan_id=$(echo "$body" | jq -r '.data.sprintPlanId')
+            echo "Run ID: $run_id"
+            echo "Sprint Plan ID: $sprint_plan_id"
+            
+            # Output the plan ID for potential follow-up actions
+            echo "SPRINT_PLAN_ID=$sprint_plan_id" >> $GITHUB_ENV
+          else
+            echo "❌ Sprint plan generation failed"
+            error=$(echo "$body" | jq -r '.error')
+            echo "Error: $error"
+            exit 1
+          fi
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "Sprint plan generated successfully!"
+          echo "Plan ID: $SPRINT_PLAN_ID"
+          echo "Please review and approve at: https://your-admin-panel.com/dashboard/sprint-plan-approval"
+          # Add your notification logic here (Slack, Teams, email, etc.)
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Sprint plan generation failed. Check logs for details."
+          # Add your notification logic here (Slack, Teams, email, etc.)

@@ -1,0 +1,58 @@
+name: Daily Ingestion
+
+on:
+  schedule:
+    # Runs Monday-Friday at 2 PM PST (10 PM UTC)
+    - cron: '0 22 * * 1-5'
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  run-ingestion:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trigger Daily Ingestion
+        env:
+          PM_AGENT_URL: ${{ secrets.PM_AGENT_URL }}
+          PM_AGENT_API_KEY: ${{ secrets.PM_AGENT_API_KEY }}
+        run: |
+          echo "Triggering daily ingestion at $(date)"
+          
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "x-api-key: ${PM_AGENT_API_KEY}" \
+            "${PM_AGENT_URL}/api/ingestion/run")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Response code: $http_code"
+          echo "Response body: $body"
+          
+          if [ "$http_code" -ne 201 ] && [ "$http_code" -ne 200 ]; then
+            echo "❌ Ingestion failed with HTTP $http_code"
+            exit 1
+          fi
+          
+          success=$(echo "$body" | jq -r '.success')
+          
+          if [ "$success" = "true" ]; then
+            echo "✅ Daily ingestion completed successfully"
+            run_id=$(echo "$body" | jq -r '.data.runId')
+            summary_generated=$(echo "$body" | jq -r '.data.summaryGenerated')
+            echo "Run ID: $run_id"
+            echo "Summary Generated: $summary_generated"
+          else
+            echo "❌ Ingestion failed"
+            error=$(echo "$body" | jq -r '.error')
+            echo "Error: $error"
+            exit 1
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Daily ingestion failed. Check logs for details."
+          # Add your notification logic here (Slack, Teams, email, etc.)
