@@ -37,6 +37,26 @@ export class DailySummary extends Document {
     nextSteps: string[];
   }>;
 
+  @Prop({
+    type: [
+      {
+        task: String,
+        owner: String,
+        status: String, // planned|started|completed_in_current_sprint
+        targetSprint: String, // current|next
+        priority: String, // high|medium|low
+      },
+    ],
+    default: [],
+  })
+  upcomingWork: Array<{
+    task: string;
+    owner: string;
+    status: string;
+    targetSprint: string;
+    priority: string;
+  }>;
+
   @Prop()
   generatedAt: Date;
 }

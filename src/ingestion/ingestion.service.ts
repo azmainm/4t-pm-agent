@@ -126,6 +126,7 @@ export class IngestionService {
           summary: p.progressItems.join('; '),
           nextSteps: p.commitments,
         })),
+        upcomingWork: summary.upcomingWork || [],
         generatedAt: new Date(),
       });
 

@@ -16,6 +16,13 @@ export interface DailySummaryResult {
   decisions: string[];
   blockers: string[];
   keyTopics: string[];
+  upcomingWork: Array<{
+    task: string;
+    owner: string;
+    status: string;
+    targetSprint: string;
+    priority: string;
+  }>;
   llmModel: string;
   inputTokens: number;
   outputTokens: number;
@@ -75,6 +82,7 @@ export class SummarizationService {
       decisions: parsed.decisions || [],
       blockers: parsed.blockers || [],
       keyTopics: parsed.keyTopics || [],
+      upcomingWork: parsed.upcomingWork || [],
       llmModel: this.openaiService.getDefaultModel(),
       inputTokens: response.usage?.prompt_tokens || 0,
       outputTokens: response.usage?.completion_tokens || 0,

@@ -14,7 +14,16 @@ Your output must be a JSON object with this exact structure:
   "actionItems": ["specific action items with owners if mentioned"],
   "decisions": ["decisions that were made during the meeting"],
   "blockers": ["blockers or issues raised by anyone"],
-  "keyTopics": ["main topics discussed"]
+  "keyTopics": ["main topics discussed"],
+  "upcomingWork": [
+    {
+      "task": "Description of new task or plan discussed",
+      "owner": "Person assigned or discussed (if mentioned)",
+      "status": "planned|started|completed_in_current_sprint",
+      "targetSprint": "current|next",
+      "priority": "high|medium|low (if mentioned)"
+    }
+  ]
 }
 
 Guidelines:
@@ -22,5 +31,10 @@ Guidelines:
 - Action items should be specific and include who is responsible if mentioned.
 - Decisions should be clear statements of what was decided.
 - Blockers should include both technical and non-technical blockers.
+- **upcomingWork**: Capture NEW tasks, features, or plans discussed for current or future sprints:
+  - If someone mentions "I'll work on X", "We need to build Y", "Let's do Z next sprint" → add to upcomingWork
+  - Mark status as "planned" if not started, "started" if in progress, "completed_in_current_sprint" if finished
+  - Mark targetSprint as "current" if for this sprint, "next" if for next sprint
+  - Include priority if explicitly mentioned (e.g., "high priority", "urgent", "client request")
 - Be thorough but concise. Don't add information that wasn't in the transcript.
 - If someone didn't speak or had no update, still list them with empty arrays.`;

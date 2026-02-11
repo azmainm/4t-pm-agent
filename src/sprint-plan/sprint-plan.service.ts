@@ -118,8 +118,8 @@ export class SprintPlanService {
       // Pass 2: Analyze Teams messages
       const messagesAnalysis = await this.analyzeMessages(allMessages, runId);
 
-      // Pass 3: Analyze previous plan
-      const previousPlanAnalysis = await this.analyzePreviousPlan(previousPlanText, runId);
+      // Pass 3: Cross-reference previous plan with daily summaries (identify what's done vs pending)
+      const previousPlanAnalysis = await this.analyzePreviousPlan(previousPlanText, last10Summaries, runId);
 
       // Pass 4: Generate final sprint plan
       const sprintPlanOutput = await this.generateFinalPlan(
@@ -257,6 +257,9 @@ export class SprintPlanService {
 
     const summariesText = summaries.map(s => {
       const date = new Date(s.date).toISOString().split('T')[0];
+      const upcomingWorkText = s.upcomingWork && s.upcomingWork.length > 0
+        ? `\nUpcoming Work Discussed:\n${s.upcomingWork.map((w: any) => `  - ${w.task} (Owner: ${w.owner || 'Unassigned'}, Status: ${w.status}, Sprint: ${w.targetSprint}${w.priority ? ', Priority: ' + w.priority : ''})`).join('\n')}`
+        : '';
       return `
 Date: ${date}
 Overall: ${s.overallSummary}
@@ -264,15 +267,18 @@ Action Items: ${s.actionItems.join(', ')}
 Decisions: ${s.decisions.join(', ')}
 Blockers: ${s.blockers.join(', ')}
 Per Person:
-${s.perPersonSummary.map((p: any) => `  - ${p.name}: ${p.summary} (Next: ${p.nextSteps.join(', ')})`).join('\n')}
+${s.perPersonSummary.map((p: any) => `  - ${p.name}: ${p.summary} (Next: ${p.nextSteps.join(', ')})`).join('\n')}${upcomingWorkText}
       `.trim();
     }).join('\n\n---\n\n');
 
     const prompt = `Analyze these daily standup summaries and extract:
-1. Key accomplishments
-2. Recurring themes/patterns
-3. Blockers or challenges
-4. Action items that need follow-up
+
+1. WHAT WAS COMPLETED: List specific tasks/features each person completed
+2. WHO WORKED ON WHAT: For each person, what projects/areas they focused on
+3. BLOCKERS: Unresolved blockers or challenges that need to continue
+4. ACTION ITEMS: Pending action items that weren't completed yet
+
+Be specific about task names and assignees. This will be used to verify what from the previous sprint plan was actually completed.
 
 Summaries:
 ${summariesText}`;
@@ -312,9 +318,16 @@ ${summariesText}`;
       }).join('\n');
 
       const prompt = `Analyze these Teams messages (chunk ${index + 1}/${chunks.length}) and extract:
-1. Important discussions
-2. Decisions made
-3. Questions or issues raised
+
+1. NEW WORK MENTIONED: Any new features, tasks, or projects discussed for future sprints
+2. CURRENT WORK STATUS: Updates on ongoing tasks (progress, blockers, completion status)
+3. DECISIONS MADE: Decisions that affect sprint planning (priorities, tech choices, scope changes)
+4. WORK ASSIGNMENTS: Who is assigned to work on what (new or ongoing)
+5. PRIORITY INDICATORS: Any explicit mentions of priority, urgency, or client requests
+6. CLIENT WORK: Tasks related to client projects or client requests (note if new client or existing)
+7. BUGS/ISSUES: Bug fixes or issues from clients that need addressing
+
+Pay attention to context about priorities, client work, and task status.
 
 Messages:
 ${messagesText}`;
@@ -334,20 +347,39 @@ ${messagesText}`;
     return chunkAnalyses.join('\n\n---\n\n');
   }
 
-  private async analyzePreviousPlan(previousPlanText: string, runId: string): Promise<string> {
+  private async analyzePreviousPlan(previousPlanText: string, summaries: any[], runId: string): Promise<string> {
     this.logger.info({ runId, event: 'sprint_plan.analyze_previous_plan' });
 
     if (!previousPlanText) {
       return 'No previous sprint plan available.';
     }
 
-    const prompt = `Analyze this previous sprint plan and identify:
-1. What tasks were likely completed (format/structure reference)
-2. What tasks were likely not completed
-3. Any patterns or structure to maintain
+    // Format daily summaries for cross-reference
+    const summariesText = summaries.map(s => {
+      const date = new Date(s.date).toISOString().split('T')[0];
+      return `${date}: ${s.overallSummary}\n${s.perPersonSummary.map((p: any) => `  - ${p.name}: ${p.summary}`).join('\n')}`;
+    }).join('\n\n');
 
-Previous Plan:
-${previousPlanText}`;
+    const prompt = `You must CROSS-REFERENCE the previous sprint plan with daily standup summaries to identify what was actually completed vs what's still pending or partially complete.
+
+PREVIOUS SPRINT PLAN:
+${previousPlanText}
+
+DAILY SUMMARIES (What actually happened):
+${summariesText}
+
+INSTRUCTIONS:
+1. For EACH task in the previous sprint plan, check if it appears in the daily summaries
+2. Create three lists:
+   - COMPLETED TASKS: Tasks from previous plan that were fully finished (with evidence from summaries)
+   - PARTIALLY COMPLETE: Tasks that were worked on but not finished (mention what's done and what's remaining)
+   - NOT STARTED/PENDING: Tasks from previous plan NOT mentioned at all (must carry forward to next sprint)
+3. For each incomplete task (partial or pending), note:
+   - Who it was originally assigned to
+   - What percentage is done (if partially complete)
+   - What remains to be done
+
+Be thorough - every task from the previous plan must be categorized as completed, partially complete, or pending.`;
 
     const analysis = await this.reactAgent.callLLM(prompt);
 
@@ -379,23 +411,37 @@ ${previousPlanText}`;
 Team Members: ${teamMembers.map(m => `${m.name} (${m.role})`).join(', ')}
 Sprint Period: ${nextMonday.toISOString().split('T')[0]} to ${nextNextMonday.toISOString().split('T')[0]}`;
 
-    const userMessage = `Based on the following analysis, generate the next sprint plan:
+    const userMessage = `Generate the next sprint plan by following these steps:
 
-# Daily Summaries Analysis
+# Daily Summaries Analysis (What got done + Who worked on what)
 ${summariesAnalysis}
 
-# Teams Messages Analysis
+# Teams Messages Analysis (New work + Status updates + Priorities)
 ${messagesAnalysis}
 
-# Previous Sprint Plan Analysis
+# Previous Sprint Plan Cross-Reference (Completed vs Partially Complete vs Pending)
 ${previousPlanAnalysis}
+
+SPRINT PLANNING RULES:
+1. CARRY FORWARD: All incomplete tasks (pending OR partially complete) from previous sprint MUST be included in the new sprint
+   - If partially complete, update the description to note what's done and what remains
+   - Assign to the same person who was working on it
+2. ADD NEW WORK: Include new tasks from Teams/standup discussions
+3. ASSIGN CORRECTLY: Assign tasks to people based on:
+   - Who worked on related items in daily summaries
+   - Who was originally assigned to carry-forward tasks
+   - Who was mentioned in Teams for new work
+4. PRIORITIZE TASKS:
+   - HIGH priority: Client work (new or existing), bug fixes, client requests, or tasks explicitly mentioned as urgent/high priority
+   - MEDIUM priority: Internal company tasks, refactoring, technical debt
+   - Do NOT base priority on whether task is new or pending - base it on the nature of the work
 
 IMPORTANT: You MUST respond with ONLY a JSON object (no markdown, no code blocks, no text before or after). The JSON must match this exact schema:
 
 {
   "sprintDateRange": { "start": "${nextMonday.toISOString().split('T')[0]}", "end": "${nextNextMonday.toISOString().split('T')[0]}" },
   "primaryGoals": ["string"],
-  "notes": ["string"],
+  "notes": ["Previous Sprint Review: [summarize completed, partially complete, and pending tasks]", "other notes"],
   "ownerBreakdown": [
     {
       "name": "Full Name",
@@ -406,7 +452,7 @@ IMPORTANT: You MUST respond with ONLY a JSON object (no markdown, no code blocks
           "tasks": [
             {
               "title": "Task title",
-              "description": "What to build",
+              "description": "What to build (if partially complete, note what's done and what remains)",
               "points": 1-5,
               "priority": "high",
               "acceptanceCriteria": ["criterion"]
@@ -419,9 +465,9 @@ IMPORTANT: You MUST respond with ONLY a JSON object (no markdown, no code blocks
 }
 
 Generate the sprint plan with:
-1. Primary Goals (3-5 bullet points)
-2. Notes section with Previous Sprint Review
-3. Owner breakdown with tasks for each person: ${teamMembers.map(m => m.name).join(', ')}`;
+1. Primary Goals (3-5 bullet points) - focus on completing incomplete tasks + high-priority new work
+2. Notes section - MUST include Previous Sprint Review (what completed, what partially complete with %, what pending)
+3. Owner breakdown with tasks for EACH person: ${teamMembers.map(m => m.name).join(', ')} - ensure ALL incomplete tasks are included`;
 
     // Use direct JSON generation instead of tool calling for gpt-5-nano
     const response = await this.openaiService.chatCompletion({

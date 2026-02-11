@@ -1,7 +1,7 @@
 # PM Agent - End-to-End Architecture
 
-**Last Updated:** February 10, 2026  
-**Version:** 1.0.0  
+**Last Updated:** February 11, 2026  
+**Version:** 1.1.0  
 **Purpose:** Complete system architecture showing all components, data flows, and integrations
 
 ---
@@ -403,6 +403,22 @@ START: GitHub Actions Trigger (Weekdays 2 PM PST)
     },
     // ... 3 more people
   ],
+  upcomingWork: [
+    {
+      task: "Build admin dashboard for PM agent",
+      owner: "Azmain Morshed",
+      status: "planned",
+      targetSprint: "next",
+      priority: "high"
+    },
+    {
+      task: "Migrate to Bunny CDN",
+      owner: "Shafkat Kabir",
+      status: "started",
+      targetSprint: "current",
+      priority: "medium"
+    }
+  ],
   keyTopics: ["Storage", "Telephony", "CRM", "Automation"],
   generatedAt: ISODate("2026-02-10T10:22:23.842Z")
 }
@@ -460,30 +476,46 @@ START: GitHub Actions Trigger (Fridays 2 PM PST)
   │     │     │
   │     │     ├─> Step 5: Multi-Pass LLM Analysis
   │     │     │     │
-  │     │     │     ├─> Pass 1: Analyze Daily Summaries
-  │     │     │     │     Input: 10 summaries concatenated
-  │     │     │     │     Prompt: Extract patterns, goals, blockers
-  │     │     │     │     Output: Structured analysis
+  │     │     │           ├─> Pass 1: Analyze Daily Summaries
+  │     │     │     │     Input: 10 summaries concatenated (includes upcomingWork)
+  │     │     │     │     Prompt: Extract:
+  │     │     │     │       - WHAT WAS COMPLETED (specific tasks)
+  │     │     │     │       - WHO WORKED ON WHAT (person → project)
+  │     │     │     │       - BLOCKERS (unresolved issues)
+  │     │     │     │       - ACTION ITEMS (pending items)
+  │     │     │     │     Output: Structured analysis with completions
   │     │     │     │     Duration: ~15 seconds
   │     │     │     │
-  │     │     │     ├─> Pass 2: Analyze Teams Messages
+  │     │     │           ├─> Pass 2: Analyze Teams Messages
   │     │     │     │     Input: Teams messages (chunked if >50)
-  │     │     │     │     Prompt: Extract decisions, discussions
-  │     │     │     │     Output: Key themes and decisions
-  │     │     │     │     Duration: ~20 seconds
+  │     │     │     │     Prompt: Extract:
+  │     │     │     │       - NEW WORK MENTIONED (future tasks)
+  │     │     │     │       - CURRENT WORK STATUS (progress updates)
+  │     │     │     │       - PRIORITY INDICATORS (urgency, client work)
+  │     │     │     │       - CLIENT WORK (client projects/requests)
+  │     │     │     │       - BUGS/ISSUES (client bug fixes)
+  │     │     │     │     Output: Forward-looking work + status updates
+  │     │     │     │     Duration: ~20 seconds (per chunk)
   │     │     │     │
-  │     │     │     ├─> Pass 3: Analyze Previous Plan
-  │     │     │     │     Input: Previous sprint plan text
-  │     │     │     │     Prompt: Extract completed/incomplete tasks
-  │     │     │     │     Output: Carryover analysis
-  │     │     │     │     Duration: ~10 seconds
+  │     │     │           ├─> Pass 3: Cross-Reference Previous Plan
+  │     │     │     │     Input: Previous plan text + Daily summaries
+  │     │     │     │     Prompt: CROSS-REFERENCE each task:
+  │     │     │     │       - COMPLETED (with evidence from summaries)
+  │     │     │     │       - PARTIALLY COMPLETE (% done, what remains)
+  │     │     │     │       - NOT STARTED/PENDING (carry forward)
+  │     │     │     │     Output: 3 categorized task lists with evidence
+  │     │     │     │     Duration: ~12 seconds
   │     │     │     │
-  │     │     │     └─> Pass 4: Generate Final Sprint Plan
-  │     │     │           Input: Results from passes 1-3
-  │     │     │           Prompt: SPRINT_PLAN_PROMPT
+  │     │     │           └─> Pass 4: Generate Final Sprint Plan
+  │     │     │           Input: All 3 analyses combined
+  │     │     │           Prompt: SPRINT PLANNING RULES:
+  │     │     │             1. Carry forward incomplete tasks (partial + pending)
+  │     │     │             2. Add new work from Teams/summaries
+  │     │     │             3. Assign based on who worked on related items
+  │     │     │             4. Priority: Client/bugs = HIGH, Internal = MEDIUM
   │     │     │           Output: Complete sprint plan JSON
   │     │     │           Duration: ~30 seconds
-  │     │     │           Total: ~75 seconds
+  │     │     │           Total: ~77 seconds
   │     │     │
   │     │     ├─> Step 6: Generate DOCX Document
   │     │     │     Service: DocxGeneratorService
@@ -686,6 +718,15 @@ START: User Opens Admin Panel
       nextSteps: [String]           // Their commitments
     }
   ],
+  upcomingWork: [                   // NEW WORK discussed in standup
+    {
+      task: String,                 // Task description
+      owner: String,                // Person assigned (if mentioned)
+      status: String,               // planned|started|completed_in_current_sprint
+      targetSprint: String,         // current|next
+      priority: String              // high|medium|low (if mentioned)
+    }
+  ],
   keyTopics: [String],              // Main topics discussed
   generatedAt: ISODate              // When summary was generated
 }
@@ -695,8 +736,9 @@ Indexes:
 - generatedAt: -1
 ```
 
-**Average Size:** 800-1000 bytes  
+**Average Size:** 900-1200 bytes (increased due to upcomingWork)  
 **Growth Rate:** 1 document per weekday = ~22/month
+**Purpose of upcomingWork:** Tracks new work discussed during standups for sprint planning cross-reference
 
 #### Collection: sprintPlans
 
