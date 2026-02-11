@@ -51,6 +51,7 @@ export class JiraService implements OnModuleInit {
     const activeSprintId = await this.getActiveSprintId();
 
     for (const owner of plan.ownerBreakdown) {
+
       const member = this.teamMembers.find(
         (m) => m.name.toLowerCase() === owner.name.toLowerCase(),
       );
@@ -68,13 +69,24 @@ export class JiraService implements OnModuleInit {
           try {
             const description = this.buildAdfDescription(task, focus);
 
+            // Log the payload for debugging
+            this.logger.debug(
+              {
+                projectKey: this.projectKey,
+                summary: task.title,
+                assigneeId: member.jiraAccountId,
+                priority: this.mapPriority(task.priority),
+              },
+              'Creating Jira issue',
+            );
+
             const issue = await this.client.issues.createIssue({
               fields: {
                 project: { key: this.projectKey },
                 summary: task.title,
                 description: description as any,
                 issuetype: { name: 'Task' },
-                assignee: { accountId: member.jiraAccountId },
+                assignee: member.jiraAccountId ? { accountId: member.jiraAccountId } : undefined,
                 priority: { name: this.mapPriority(task.priority) },
                 labels: [
                   'sprint-agent',
@@ -90,7 +102,31 @@ export class JiraService implements OnModuleInit {
 
             // Assign to active sprint if available
             if (activeSprintId) {
-              await this.moveToSprint(issueKey, activeSprintId);
+              try {
+                await this.moveToSprint(issueKey, activeSprintId);
+                this.logger.info({ issueKey, sprintId: activeSprintId }, 'Issue added to sprint');
+              } catch (sprintError) {
+                this.logger.warn(
+                  { issueKey, error: (sprintError as Error).message },
+                  'Failed to add issue to sprint (issue still created)',
+                );
+              }
+            }
+
+            // Set status to TO DO
+            try {
+              await this.client.issues.doTransition({
+                issueIdOrKey: issueKey,
+                transition: {
+                  id: '11', // TO DO transition ID (common in Jira, may vary)
+                },
+              });
+              this.logger.info({ issueKey }, 'Issue status set to TO DO');
+            } catch (statusError) {
+              this.logger.warn(
+                { issueKey, error: (statusError as Error).message },
+                'Failed to set issue status to TO DO (issue still created)',
+              );
             }
 
             this.logger.info(
@@ -103,13 +139,18 @@ export class JiraService implements OnModuleInit {
               assignee: owner.name,
               summary: task.title,
               status: 'created',
+              browserUrl: `${this.configService.get<string>('jira.host')}/browse/${issueKey}`,
             });
           } catch (error) {
+            const errorMessage = (error as any).response?.data 
+              ? JSON.stringify((error as any).response.data)
+              : (error as Error).message;
+            
             this.logger.error(
               {
                 assignee: owner.name,
                 task: task.title,
-                error: (error as Error).message,
+                error: errorMessage,
               },
               'Failed to create Jira issue',
             );
@@ -118,7 +159,7 @@ export class JiraService implements OnModuleInit {
               jiraIssueKey: 'FAILED',
               assignee: owner.name,
               summary: task.title,
-              status: `error: ${(error as Error).message}`,
+              status: `error: ${errorMessage}`,
             });
           }
         }
@@ -165,7 +206,9 @@ export class JiraService implements OnModuleInit {
           { type: 'text', text: task.priority },
         ],
       },
-      { type: 'rule' },
+      {
+        type: 'rule',
+      },
       {
         type: 'paragraph',
         content: [{ type: 'text', text: task.description }],
@@ -176,11 +219,9 @@ export class JiraService implements OnModuleInit {
         content: [{ type: 'text', text: 'Acceptance Criteria' }],
       },
       {
-        type: 'taskList',
-        attrs: { localId: 'ac-list' },
+        type: 'bulletList',
         content: task.acceptanceCriteria.map((criterion) => ({
-          type: 'taskItem',
-          attrs: { localId: `ac-${Math.random().toString(36).slice(2)}`, state: 'TODO' },
+          type: 'listItem',
           content: [
             {
               type: 'paragraph',
@@ -209,12 +250,14 @@ export class JiraService implements OnModuleInit {
 
   private async getActiveSprintId(): Promise<number | null> {
     try {
-      const response = await (this.client as any).board.getAllSprints({
-        boardId: this.boardId,
-        state: 'active',
-      });
+      // Make direct REST API call since jira.js typing doesn't expose this properly
+      const url = `/rest/agile/1.0/board/${this.boardId}/sprint?state=active`;
+      const response: any = await this.client.sendRequest({
+        url,
+        method: 'GET',
+      }, (response) => response);
 
-      const activeSprints = response.values || [];
+      const activeSprints = response?.values || [];
       if (activeSprints.length === 0) {
         this.logger.warn('No active sprint found');
         return null;

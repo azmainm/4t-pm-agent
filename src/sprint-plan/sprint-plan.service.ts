@@ -6,6 +6,7 @@ import { DailySummaryRepository } from '../database/repositories/daily-summary.r
 import { SprintPlanRepository } from '../database/repositories/sprint-plan.repository.js';
 import { AgentRunRepository } from '../database/repositories/agent-run.repository.js';
 import { ReactAgentService } from '../llm/agent/react-agent.service.js';
+import { OpenaiService } from '../llm/openai.service.js';
 import { DocxGeneratorService } from '../docx/docx-generator.service.js';
 import { OnedriveService } from '../graph/onedrive.service.js';
 import { TeamsChannelService } from '../graph/teams-channel.service.js';
@@ -31,6 +32,7 @@ export class SprintPlanService {
     private readonly sprintPlanRepo: SprintPlanRepository,
     private readonly agentRunRepo: AgentRunRepository,
     private readonly reactAgent: ReactAgentService,
+    private readonly openaiService: OpenaiService,
     private readonly docxGenerator: DocxGeneratorService,
     private readonly onedriveService: OnedriveService,
     private readonly teamsChannelService: TeamsChannelService,
@@ -127,7 +129,7 @@ export class SprintPlanService {
         runId,
       );
 
-      // Step 3: Save plan to DB
+      // Step 3: Add points rubric to plan
       const planDataWithRubric = {
         ...sprintPlanOutput,
         pointsRubric: {
@@ -139,17 +141,35 @@ export class SprintPlanService {
         },
       };
 
+      // Parse dates safely
+      const parseDate = (dateStr: string): Date => {
+        if (!dateStr) return new Date();
+        // Try ISO format first
+        let date = new Date(dateStr);
+        if (!isNaN(date.getTime())) return date;
+        // Try MM/DD/YYYY format
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          date = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+          if (!isNaN(date.getTime())) return date;
+        }
+        // Fallback to calculated dates
+        this.logger.warn({ dateStr }, 'Invalid date format, using calculated date');
+        return new Date();
+      };
+
+      // Save to DB
       const sprintPlan = await this.sprintPlanRepo.create({
-        sprintStartDate: new Date(sprintPlanOutput.sprintDateRange.start),
-        sprintEndDate: new Date(sprintPlanOutput.sprintDateRange.end),
+        sprintStartDate: parseDate(sprintPlanOutput.sprintDateRange.start),
+        sprintEndDate: parseDate(sprintPlanOutput.sprintDateRange.end),
         planData: planDataWithRubric as any,
         status: 'generated',
       });
 
       this.logger.info({ runId, event: 'sprint_plan.saved', sprintPlanId: sprintPlan._id });
 
-      // Step 4: Generate .docx
-      const docxBuffer = await this.docxGenerator.generate(sprintPlanOutput);
+      // Step 4: Generate .docx (use planDataWithRubric which has the rubric)
+      const docxBuffer = await this.docxGenerator.generate(planDataWithRubric as any);
 
       await this.agentRunRepo.addStep(runId, {
         stepName: 'generate_docx',
@@ -286,9 +306,10 @@ ${summariesText}`;
 
     const chunkAnalyses = [];
     for (const [index, chunk] of chunks.entries()) {
-      const messagesText = chunk.map((m: any) => 
-        `[${new Date(m.timestamp).toISOString()}] ${m.senderName}: ${m.content}`
-      ).join('\n');
+      const messagesText = chunk.map((m: any) => {
+        const timestamp = m.timestamp ? new Date(m.timestamp).toISOString() : 'Unknown';
+        return `[${timestamp}] ${m.senderName}: ${m.content}`;
+      }).join('\n');
 
       const prompt = `Analyze these Teams messages (chunk ${index + 1}/${chunks.length}) and extract:
 1. Important discussions
@@ -369,24 +390,64 @@ ${messagesAnalysis}
 # Previous Sprint Plan Analysis
 ${previousPlanAnalysis}
 
-Generate a structured sprint plan with:
-1. Primary Goals (3-5 bullet points)
-2. Notes section including:
-   - What was completed from previous sprint
-   - What was NOT completed (with reasons if known)
-   - What was done EXTRA (outside the plan)
-3. Owner breakdown with tasks, story points, and acceptance criteria`;
+IMPORTANT: You MUST respond with ONLY a JSON object (no markdown, no code blocks, no text before or after). The JSON must match this exact schema:
 
-    const agentResult = await this.reactAgent.runSprintPlanAgent(systemPrompt, userMessage);
+{
+  "sprintDateRange": { "start": "${nextMonday.toISOString().split('T')[0]}", "end": "${nextNextMonday.toISOString().split('T')[0]}" },
+  "primaryGoals": ["string"],
+  "notes": ["string"],
+  "ownerBreakdown": [
+    {
+      "name": "Full Name",
+      "focuses": [
+        {
+          "focusName": "Project Name",
+          "goal": "Goal description",
+          "tasks": [
+            {
+              "title": "Task title",
+              "description": "What to build",
+              "points": 1-5,
+              "priority": "high",
+              "acceptanceCriteria": ["criterion"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+Generate the sprint plan with:
+1. Primary Goals (3-5 bullet points)
+2. Notes section with Previous Sprint Review
+3. Owner breakdown with tasks for each person: ${teamMembers.map(m => m.name).join(', ')}`;
+
+    // Use direct JSON generation instead of tool calling for gpt-5-nano
+    const response = await this.openaiService.chatCompletion({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage }
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 4000,
+    });
+
+    const content = response.choices[0].message.content || '{}';
+    const sprintPlanOutput = typeof content === 'string' ? JSON.parse(content) : content;
 
     await this.agentRunRepo.addStep(runId, {
       stepName: 'generate_final_plan',
       startedAt: new Date(),
       completedAt: new Date(),
       success: true,
+      metadata: { 
+        inputTokens: response.usage?.prompt_tokens,
+        outputTokens: response.usage?.completion_tokens
+      },
     });
 
-    return agentResult.plan;
+    return sprintPlanOutput;
   }
 
   private getNextMonday(): Date {
@@ -433,22 +494,59 @@ Generate a structured sprint plan with:
   async approveAndCreateJiraTasks(sprintPlanId: string): Promise<any> {
     this.logger.info({ sprintPlanId }, 'Approving sprint plan and creating Jira tasks');
 
-    const sprintPlan = await this.sprintPlanRepo.findById(sprintPlanId);
-    if (!sprintPlan) {
-      throw new Error(`Sprint plan ${sprintPlanId} not found`);
+    try {
+      const sprintPlan = await this.sprintPlanRepo.findById(sprintPlanId);
+      if (!sprintPlan) {
+        return {
+          success: false,
+          error: `Sprint plan ${sprintPlanId} not found`,
+        };
+      }
+
+      const jiraIssues = await this.jiraService.createIssuesForPlan(sprintPlan.planData as any);
+      const successfulIssues = jiraIssues.filter(i => i.status === 'created');
+      const failedIssues = jiraIssues.filter(i => i.status !== 'created');
+      
+      await this.sprintPlanRepo.updateJiraIssues(
+        sprintPlanId, 
+        jiraIssues.map((i: JiraIssueResult) => i.jiraIssueKey)
+      );
+      await this.sprintPlanRepo.updateStatus(sprintPlanId, 'approved');
+
+      this.logger.info(
+        { 
+          sprintPlanId, 
+          successfulCount: successfulIssues.length,
+          failedCount: failedIssues.length,
+        }, 
+        'Sprint plan approved',
+      );
+
+      await this.notificationService.sendApprovalConfirmation(sprintPlanId, successfulIssues.length);
+
+      return {
+        success: true,
+        sprintPlanId,
+        jiraIssues: jiraIssues.map(i => ({ 
+          key: i.jiraIssueKey, 
+          url: i.browserUrl,
+          status: i.status,
+        })),
+        summary: {
+          total: jiraIssues.length,
+          successful: successfulIssues.length,
+          failed: failedIssues.length,
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        { sprintPlanId, error: (error as Error).message },
+        'Failed to approve sprint plan',
+      );
+      return {
+        success: false,
+        error: (error as Error).message,
+      };
     }
-
-    const jiraIssues = await this.jiraService.createIssuesForPlan(sprintPlan.planData as any);
-    await this.sprintPlanRepo.updateJiraIssues(sprintPlanId, jiraIssues.map((i: JiraIssueResult) => i.jiraIssueKey));
-    await this.sprintPlanRepo.updateStatus(sprintPlanId, 'approved');
-
-    this.logger.info({ sprintPlanId, issuesCreated: jiraIssues.length }, 'Jira tasks created');
-
-    await this.notificationService.sendApprovalConfirmation(sprintPlanId, jiraIssues.length);
-
-    return {
-      sprintPlanId,
-      jiraIssues: jiraIssues.map(i => ({ key: i.jiraIssueKey, url: i.browserUrl })),
-    };
   }
 }

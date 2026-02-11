@@ -8,6 +8,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
   app.useLogger(app.get(Logger));
+  
+  // Enable CORS for admin panel
+  app.enableCors({
+    origin: ['http://localhost:3001', 'http://localhost:3000'],
+    credentials: true,
+  });
+  
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({
