@@ -11,7 +11,12 @@ async function bootstrap() {
   
   // Enable CORS for admin panel
   app.enableCors({
-    origin: ['http://localhost:3001', 'http://localhost:3000'],
+    origin: [
+      'http://localhost:3001', 
+      'http://localhost:3000',
+      'https://sherpaprompt-admin.vercel.app', // Add your Vercel URL here
+      /\.vercel\.app$/, // Allow all Vercel preview deployments
+    ],
     credentials: true,
   });
   

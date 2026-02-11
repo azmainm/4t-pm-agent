@@ -9,7 +9,12 @@ async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_js_1.AppModule, { bufferLogs: true });
     app.useLogger(app.get(nestjs_pino_1.Logger));
     app.enableCors({
-        origin: ['http://localhost:3001', 'http://localhost:3000'],
+        origin: [
+            'http://localhost:3001',
+            'http://localhost:3000',
+            'https://sherpaprompt-admin.vercel.app',
+            /\.vercel\.app$/,
+        ],
         credentials: true,
     });
     app.setGlobalPrefix('api');
