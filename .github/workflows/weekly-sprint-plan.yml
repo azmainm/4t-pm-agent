@@ -2,8 +2,8 @@ name: Weekly Sprint Plan Generation
 
 on:
   schedule:
-    # Runs every Friday at 2 PM PST (10 PM UTC)
-    - cron: '0 22 * * 5'
+    # Runs every Saturday at 5:30 AM PST (1:30 PM UTC)
+    - cron: '30 13 * * 6'
   workflow_dispatch: # Allows manual trigger
 
 jobs:
