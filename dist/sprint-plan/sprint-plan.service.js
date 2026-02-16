@@ -439,6 +439,75 @@ Generate the sprint plan with:
         });
         return sprintPlanOutput;
     }
+    async reparseWordDoc(onedriveFileId) {
+        const fileBuffer = await this.onedriveService.downloadFile(onedriveFileId);
+        const result = await mammoth.extractRawText({ buffer: fileBuffer });
+        const docText = result.value;
+        this.logger.info({ textLength: docText.length }, 'Extracted text from edited Word doc');
+        const teamMembers = this.configService.get('roster.members', []);
+        const systemPrompt = `You are a sprint plan parser. You receive the full text of a Word document that contains a sprint plan. Your job is to extract the structured data from it and return it as JSON matching the exact schema provided.`;
+        const userMessage = `Parse the following sprint plan document text into structured JSON.
+
+Team Members (use these exact names): ${teamMembers.map(m => m.name).join(', ')}
+
+DOCUMENT TEXT:
+${docText}
+
+IMPORTANT: You MUST respond with ONLY a JSON object (no markdown, no code blocks, no text before or after). The JSON must match this exact schema:
+
+{
+  "sprintDateRange": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" },
+  "primaryGoals": ["string"],
+  "notes": ["string"],
+  "ownerBreakdown": [
+    {
+      "name": "Full Name",
+      "focuses": [
+        {
+          "focusName": "Project Name",
+          "goal": "Goal description",
+          "tasks": [
+            {
+              "title": "Task title",
+              "description": "Task description",
+              "points": 1-5,
+              "priority": "high|medium|low",
+              "acceptanceCriteria": ["criterion"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Extract the sprint date range from the document header
+- Map each person's section to the ownerBreakdown array
+- Preserve all tasks, descriptions, points, priorities, and acceptance criteria exactly as written in the document
+- If a field is missing or unclear, use reasonable defaults (e.g., priority "medium", points 2)`;
+        const response = await this.openaiService.chatCompletion({
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userMessage },
+            ],
+            response_format: { type: 'json_object' },
+            max_tokens: 4000,
+        });
+        const content = response.choices[0].message.content || '{}';
+        const parsedPlan = typeof content === 'string' ? JSON.parse(content) : content;
+        const planWithRubric = {
+            ...parsedPlan,
+            pointsRubric: {
+                '1': 'Small task, 1-2 hours',
+                '2': 'Medium task, 2-4 hours',
+                '3': 'Large task, 4-8 hours',
+                '5': 'Very large task, 1-2 days',
+                '8': 'Epic task, 2-3 days',
+            },
+        };
+        return planWithRubric;
+    }
     getNextMonday() {
         const today = new Date();
         const dayOfWeek = today.getDay();
@@ -467,6 +536,37 @@ Generate the sprint plan with:
                 totalTasks,
             };
         });
+    }
+    async refreshFromOneDrive(sprintPlanId) {
+        this.logger.info({ sprintPlanId }, 'Refreshing sprint plan from OneDrive');
+        try {
+            const sprintPlan = await this.sprintPlanRepo.findById(sprintPlanId);
+            if (!sprintPlan) {
+                return { success: false, error: `Sprint plan ${sprintPlanId} not found` };
+            }
+            if (!sprintPlan.onedriveFileId) {
+                return { success: false, error: 'Sprint plan has no OneDrive file ID — cannot fetch document' };
+            }
+            const updatedPlanData = await this.reparseWordDoc(sprintPlan.onedriveFileId);
+            const updated = await this.sprintPlanRepo.updatePlanData(sprintPlanId, updatedPlanData);
+            if (!updated) {
+                return { success: false, error: 'Failed to update plan data in database' };
+            }
+            const totalTasks = updatedPlanData.ownerBreakdown?.reduce((sum, owner) => sum + (owner.focuses?.reduce((focusSum, focus) => focusSum + (focus.tasks?.length || 0), 0) || 0), 0) || 0;
+            this.logger.info({ sprintPlanId, totalTasks }, 'Sprint plan refreshed from OneDrive');
+            return {
+                success: true,
+                sprintPlanId,
+                totalTasks,
+                primaryGoals: updatedPlanData.primaryGoals || [],
+                notes: updatedPlanData.notes || [],
+                ownerBreakdown: updatedPlanData.ownerBreakdown || [],
+            };
+        }
+        catch (error) {
+            this.logger.error({ sprintPlanId, error: error.message }, 'Failed to refresh sprint plan');
+            return { success: false, error: error.message };
+        }
     }
     async approveAndCreateJiraTasks(sprintPlanId) {
         this.logger.info({ sprintPlanId }, 'Approving sprint plan and creating Jira tasks');

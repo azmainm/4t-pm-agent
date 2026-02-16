@@ -39,6 +39,25 @@ export class SprintPlanController {
     }
   }
 
+  @Post('refresh')
+  async refreshSprintPlan(
+    @Body('sprintPlanId') sprintPlanId: string,
+  ): Promise<ApiResponse> {
+    if (!sprintPlanId) {
+      return errorResponse('sprintPlanId is required');
+    }
+
+    this.logger.info({ sprintPlanId }, 'Sprint plan refresh from OneDrive triggered');
+
+    const result = await this.sprintPlanService.refreshFromOneDrive(sprintPlanId);
+
+    if (result.success) {
+      return successResponse(result);
+    } else {
+      return errorResponse(result.error || 'Sprint plan refresh failed');
+    }
+  }
+
   @Post('approve')
   async approveSprintPlan(
     @Body('sprintPlanId') sprintPlanId: string,
@@ -48,7 +67,7 @@ export class SprintPlanController {
     }
 
     this.logger.info({ sprintPlanId }, 'Sprint plan approval triggered');
-    
+
     const result = await this.sprintPlanService.approveAndCreateJiraTasks(sprintPlanId);
 
     if (result.success) {

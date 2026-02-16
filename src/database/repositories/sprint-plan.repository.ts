@@ -72,6 +72,15 @@ export class SprintPlanRepository {
       .exec();
   }
 
+  async updatePlanData(
+    id: string,
+    planData: SprintPlan['planData'],
+  ): Promise<SprintPlan | null> {
+    return this.sprintPlanModel
+      .findByIdAndUpdate(id, { planData }, { new: true })
+      .exec();
+  }
+
   async findById(id: string): Promise<SprintPlan | null> {
     return this.sprintPlanModel.findById(id).exec();
   }

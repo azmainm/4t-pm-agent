@@ -3,7 +3,7 @@
 /**
  * Backfill Daily Summaries Script
  * 
- * Deletes all existing summaries and regenerates from Feb 2-12, 2026.
+ * Generates summaries for Feb 12-13, 2026 (only if missing).
  * Run with: node scripts/backfill-summaries.js
  */
 
@@ -15,7 +15,7 @@ import { SummarizationService } from '../dist/llm/summarization.service.js';
 import { Model } from 'mongoose';
 
 async function backfillSummaries() {
-  console.log('🚀 Starting summary backfill: DELETE ALL + Regenerate Feb 2-12, 2026...\n');
+  console.log('🚀 Starting summary backfill: Generate Feb 12-13, 2026 (if missing)...\n');
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
@@ -25,16 +25,10 @@ async function backfillSummaries() {
   const transcriptRepo = app.get(StandupTicketsRepository);
   const summarizationService = app.get(SummarizationService);
 
-  // Delete all existing summaries
-  console.log('🗑️  Deleting all existing summaries...');
-  const summaryModel = summaryRepo['summaryModel'];
-  const deleteResult = await summaryModel.deleteMany({});
-  console.log(`   Deleted ${deleteResult.deletedCount} summaries\n`);
-
-  // Generate dates from Feb 2 to Feb 12, 2026 (business days only)
+  // Generate dates from Feb 12 to Feb 13, 2026 (business days only)
   const businessDays = [];
-  const startDate = new Date('2026-02-02T00:00:00Z');
-  const endDate = new Date('2026-02-12T23:59:59Z');
+  const startDate = new Date('2026-02-12T00:00:00Z');
+  const endDate = new Date('2026-02-13T23:59:59Z');
 
   let currentDate = new Date(startDate);
   while (currentDate <= endDate) {
@@ -46,7 +40,7 @@ async function backfillSummaries() {
     currentDate.setDate(currentDate.getDate() + 1);
   }
 
-  console.log(`📅 Generating summaries for ${businessDays.length} business days (Feb 2-12, 2026)\n`);
+  console.log(`📅 Generating summaries for ${businessDays.length} business days (Feb 12-13, 2026)\n`);
 
   let summariesCreated = 0;
   let summariesSkipped = 0;
@@ -55,6 +49,14 @@ async function backfillSummaries() {
   for (const date of businessDays) {
     const dateStr = date.toISOString().split('T')[0];
     console.log(`📆 ${dateStr}`);
+
+    // Check if summary already exists
+    const existingSummary = await summaryRepo.findByDate(date);
+    if (existingSummary) {
+      console.log(`   ⏭️  Summary already exists, skipping\n`);
+      summariesSkipped++;
+      continue;
+    }
 
     // Find transcript for this date
     const transcript = await transcriptRepo.findByDate(date);
@@ -98,7 +100,8 @@ async function backfillSummaries() {
       console.log(`   ✅ Summary created`);
       console.log(`      Action items: ${summary.actionItems.length}`);
       console.log(`      Decisions: ${summary.decisions.length}`);
-      console.log(`      Blockers: ${summary.blockers.length}\n`);
+      console.log(`      Blockers: ${summary.blockers.length}`);
+      console.log(`      Upcoming Work: ${summary.upcomingWork.length}\n`);
       summariesCreated++;
 
       // Small delay to avoid rate limiting
@@ -112,6 +115,7 @@ async function backfillSummaries() {
   console.log('📊 BACKFILL SUMMARY');
   console.log('========================================');
   console.log(`✅ Summaries created: ${summariesCreated}`);
+  console.log(`⏭️  Summaries skipped (already exist): ${summariesSkipped}`);
   console.log(`⚠️  Transcripts missing: ${transcriptsMissing}`);
   console.log(`📈 Total coverage: ${summariesCreated}/${businessDays.length} days`);
   console.log('========================================\n');

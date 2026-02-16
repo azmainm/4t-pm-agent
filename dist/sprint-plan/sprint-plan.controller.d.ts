@@ -7,5 +7,6 @@ export declare class SprintPlanController {
     constructor(sprintPlanService: SprintPlanService, logger: PinoLogger);
     listSprintPlans(): Promise<ApiResponse>;
     generateSprintPlan(): Promise<ApiResponse>;
+    refreshSprintPlan(sprintPlanId: string): Promise<ApiResponse>;
     approveSprintPlan(sprintPlanId: string): Promise<ApiResponse>;
 }

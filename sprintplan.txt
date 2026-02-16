@@ -1,0 +1,324 @@
+Sprint Definition Summary: 02/16/26-03/02/26 
+
+ 
+
+Sprint Goals 
+
+ 
+
+Primary Goals for the Sprint 
+
+ 
+
+Close gaps on onboarding platform tasks and finalize end-to-end flow (Twilio to Telnyx migration, call routing, webhook architecture) and begin end-to-end testing. 
+
+Advance CRM-related work: finalize high-priority CRM onboarding/integration features and complete deployment. 
+
+Deliver privacy policy alignment and audit improvements across FECA/chatbot; publish website privacy policy updates. 
+
+Complete 4Trades.ai Product Manager agent readiness: end-to-end testing, prompts architecture refinement. 
+
+Address high-priority blocking issues (Azure permissions, IP whitelisting, and porting/telco routing lookups) to unblock downstream work. 
+
+ 
+
+Notes: 
+
+ 
+
+Previous Sprint Review: Completed items include telemetry/audit logging groundwork and privacy policy consolidation; sprint planning agent setup and Azure AD app registrations progressed; many onboarding, payment portal, and Telnyx/Twilio migration tasks were started but not completed. Partially complete tasks: End-to-end testing for sales/product manager bots, PIVH/PNW automation, onboarding platform integration. Pending items: Full CRM completion and then setting up for future CRM clients, Telnyx/Twilio migration completions, IP whitelisting, environment credential provisioning, and webhook architecture finalization. 
+
+New sprint will carry forward all incomplete tasks from the previous sprint with explicit status updates, and integrate new work discussed in Teams messages (Azure AD app registrations, privacy policy updates, storage/cdn, and Telnyx/Twilio migrations). 
+Ad-hoc bug fixes of issues raised by client of delivered products 
+
+ 
+
+Owner-by-Owner Task Breakdown 
+
+ 
+
+Azmain Morshed 
+
+ 
+
+Focus 1: PNW & PIVH Automations 
+
+Goal: Complete and handover automations for the two clients when the clients respond back with final requirements 
+
+ 
+
+Task: Complete PNW/PIVH automation  
+
+Points: 5  Priority: High 
+
+What to do: When either client responds back with final requirements, complete either project and deliver to client. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] All test cases pass in staging 
+
+[ ] Evidence logs show successful end-to-end flow 
+
+[ ] No critical authentication or permission blockers 
+
+ 
+
+Focus 2: CRM  
+
+Goal: Complete CRM remaining advanced features (voice capture, referral matching), configurability 
+
+ 
+
+Task 1: CRM Advanced Features (Remainder) 
+
+Points: 5  Priority: High 
+
+What to do:  
+
+Integrate voice capture and referral matching features 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Voice capture should work and form should get auto-filled  
+
+[ ] Referral matching feature should work as defined in requirements 
+ 
+
+Task 2: CRM Configurability 
+
+Points: 5  Priority: High 
+
+What to do:  
+
+Set up configurability system in CRM so clients can be easily onboarded and their CRM can be set up quickly 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] All defined requirements should be met 
+
+ 
+
+Focus 3: Product Manager Agent 
+
+Goal: Refine product manager agent so it creates better documentation in the next sprint 
+
+ 
+
+Task: Product Manager Agent Refinement 
+
+Points: 5  Priority: High 
+
+What to do:  
+
+Compare agent-made and self-edited versions, and refine the agent so it creates better sprint documentation. Edited doc should be used as reference while creating Jira tasks. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Test sprint docs should create closest to ideal sprint doc (as close as possible to self-edited version 
+[ ] Even if doc is edited, the latest version should be used to create the Jira tasks post-approval 
+
+ 
+Focus 4: Systems Privacy Audit 
+
+Goal: Ensure chatbot and FECA systems abide by the privacy policies 
+
+ 
+
+Task: Audit Chatbot Privacy Policy 
+
+Points: 5  Priority: High 
+
+What to do:  
+
+Analyze chatbot and ensure it abides by all defined privacy policies. Refer to how Voice Agent audit is done. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Every category/policy defined in the privacy policies is met by the Chatbot. 
+
+ 
+
+ 
+
+Focus 5: Onboarding Platform & Payment Integration (SK) 
+
+Goal: Advance onboarding platform testing, CDN/routing improvements, and payment portal integration readiness. 
+
+ 
+
+Task 1: Converged Pay / Stripe comparison and integration prep 
+
+Points: 3  Priority: High 
+
+What to do: Evaluate Converged Pay vs Stripe; prepare integration plan and testing strategy. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Comparison documented 
+
+[ ] Recommended path for MVP integration chosen 
+
+ 
+
+Task 2: Telnyx/Twilio migration flow setup 
+
+Points: 4  Priority: High 
+
+What to do: Set up migration flow, retry logic, and webhook architecture adjustments; coordinate with Doug. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Migration flow documented 
+
+[ ] Webhook endpoints updated and tested 
+
+ 
+
+Task 3: Onboarding portal unification & domain/credential handoffs 
+
+Points: 3  Priority: Medium 
+
+What to do: Consolidate onboarding portal for multiple clients; ensure domain/credential handoffs are streamlined. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Portal unified across clients 
+
+[ ] Credentials shared securely and access granted 
+
+ 
+
+Task 4: Complete Onboarding Platform 
+
+Points: 2  Priority: Medium 
+
+What to do: Complete development and end-to-end testing of the onboarding platform 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Payments work 
+
+[ ] Voice agent gets set up for any new business at once and their management platform accounts are also set up 
+
+ 
+
+ 
+
+Faiyaz Rahman 
+
+ 
+
+Focus 1: Flooring America Voice Agent 
+
+Goal: Configure voice agent for new client Flooring America of Oregon 
+ 
+
+Task: Flooring America Voice Agent 
+
+Points: 5  Priority: High 
+
+What to do: Collect all requirements from Doug and set up a voice agent for new client 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] End to end tests succeed for all cases 
+
+ 
+
+Focus 2: Admin Portal Costs & Storage 
+
+Goal: Complete admin portal costs feature, storage cost analysis, and related integration tasks. 
+
+ 
+
+Task: Admin costs portal in admin panel 
+
+Points: 4  Priority: High 
+
+What to do: Build and deploy admin costs portal; integrate with storage cost analytics tools. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Portal functional in staging 
+
+[ ] Cost analytics data visible and correct 
+
+ 
+Focus 3: FECA Privacy Audit 
+
+Goal: Complete admin portal costs feature, storage cost analysis, and related integration tasks. 
+
+ 
+
+Task: Audit FECA Privacy Policy  
+
+Points: 3  Priority: Medium 
+
+What to do:  
+
+Analyze chatbot and ensure it abides by all defined privacy policies. Refer to how Voice Agent audit is done. 
+
+ 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Every category/policy defined in the privacy policies is met by the Chatbot. 
+ 
+
+Focus 4: Teams-Sales Bot 
+
+Goal: Completion + make-live of the Teams Sales Agent.  
+
+ 
+
+Task: Teams Sales Bot Completion 
+
+Points: 4  Priority: High 
+
+What to do: Collect all handover instructions from Azmain and complete remainder of the sales agent. Test end to end. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Agent should join all meetings and behave as defined in requirements. 
+
+ 
+
+POINTS RUBRIC: 
+
+ 
+
+1 = Small task, 1-2 hours 
+
+2 = Medium task, 2-4 hours 
+
+3 = Large task, 4-8 hours 
+
+5 = Very large task, 1-2 days 
+
+8 = Epic task, 2-3 days 

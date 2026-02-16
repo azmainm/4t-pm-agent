@@ -37,7 +37,9 @@ export declare class SprintPlanService {
     private analyzeMessages;
     private analyzePreviousPlan;
     private generateFinalPlan;
+    private reparseWordDoc;
     private getNextMonday;
     listSprintPlans(limit?: number): Promise<any[]>;
+    refreshFromOneDrive(sprintPlanId: string): Promise<any>;
     approveAndCreateJiraTasks(sprintPlanId: string): Promise<any>;
 }

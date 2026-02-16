@@ -55,6 +55,11 @@ let SprintPlanRepository = class SprintPlanRepository {
             .findByIdAndUpdate(id, { jiraIssueKeys }, { new: true })
             .exec();
     }
+    async updatePlanData(id, planData) {
+        return this.sprintPlanModel
+            .findByIdAndUpdate(id, { planData }, { new: true })
+            .exec();
+    }
     async findById(id) {
         return this.sprintPlanModel.findById(id).exec();
     }

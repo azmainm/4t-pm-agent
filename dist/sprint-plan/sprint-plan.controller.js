@@ -46,6 +46,19 @@ let SprintPlanController = class SprintPlanController {
             return (0, api_response_dto_js_1.errorResponse)(result.error || 'Sprint plan generation failed');
         }
     }
+    async refreshSprintPlan(sprintPlanId) {
+        if (!sprintPlanId) {
+            return (0, api_response_dto_js_1.errorResponse)('sprintPlanId is required');
+        }
+        this.logger.info({ sprintPlanId }, 'Sprint plan refresh from OneDrive triggered');
+        const result = await this.sprintPlanService.refreshFromOneDrive(sprintPlanId);
+        if (result.success) {
+            return (0, api_response_dto_js_1.successResponse)(result);
+        }
+        else {
+            return (0, api_response_dto_js_1.errorResponse)(result.error || 'Sprint plan refresh failed');
+        }
+    }
     async approveSprintPlan(sprintPlanId) {
         if (!sprintPlanId) {
             return (0, api_response_dto_js_1.errorResponse)('sprintPlanId is required');
@@ -73,6 +86,13 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], SprintPlanController.prototype, "generateSprintPlan", null);
+__decorate([
+    (0, common_1.Post)('refresh'),
+    __param(0, (0, common_1.Body)('sprintPlanId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], SprintPlanController.prototype, "refreshSprintPlan", null);
 __decorate([
     (0, common_1.Post)('approve'),
     __param(0, (0, common_1.Body)('sprintPlanId')),
