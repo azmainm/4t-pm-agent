@@ -1,0 +1,355 @@
+Sprint Definition Summary: 02/16/26-03/02/26 
+
+ 
+
+Sprint Goals 
+
+ 
+
+Primary Goals for the Sprint 
+
+ 
+
+Close gaps on onboarding platform tasks and finalize end-to-end flow (Twilio to Telix migration, call routing, webhook architecture) and begin end-to-end testing. 
+
+Advance CRM-related work: finalize high-priority CRM onboarding/integration features and prepare for deployment. 
+
+Deliver privacy policy alignment and audit improvements across FECA/chatbot/voice agent 
+
+Complete 4Trades.ai product manager agent readiness: end-to-end testing, prompts architecture refinement, and agent deployment planning. 
+
+Address high-priority blocking issues (Azure permissions, IP whitelisting, and porting/telco routing lookups) to unblock downstream work. 
+
+ 
+
+Notes: 
+
+ 
+
+Previous Sprint Review: Completed items include telemetry/audit logging and privacy policy consolidation in the voice agent; sprint planning agent setup and Azure AD app registrations progressed; many onboarding, payment portal, and Telnyx/Twilio migration tasks were started but not completed. Partially complete tasks: End-to-end testing for sales/product manager bots, PICS/PNW automation , onboarding platform integration Pending items: CRM Completion (Configuration, remaining advanced features, responseiveness, deployment), Telnyx/Twilio migration completions, IP whitelisting, environment credential provisioning, and webhook architecture finalization. 
+
+New sprint will carry forward all incomplete tasks from the previous sprint with explicit status updates, and integrate new work discussed in Teams messages (Azure AD app registrations, Bunny.net storage, privacy policy updates, storage/cdn, and Telnyx/Twilio migrations). 
+
+ 
+
+Owner-by-Owner Task Breakdown 
+
+ 
+
+Azmain Morshed 
+
+ 
+
+Focus 1: PNW Automation & Bot Infrastructure 
+
+Goal: Deliver end-to-end automation for product manager and sales bot integration; finalize sprint planning agent automation; implement data rights/audit features; ensure privacy policy alignment. 
+
+ 
+
+Task 1: End-to-end testing for sales bot and product manager bot 
+
+Points: 5  Priority: High 
+
+What to do: Complete integration testing, gather test evidence logs, validate credentials, and verify test coverage across environments. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] All test cases pass in staging 
+
+[ ] Evidence logs show successful end-to-end flow 
+
+[ ] No critical authentication or permission blockers 
+
+ 
+
+Task 2: TDs/PNW automation enhancements 
+
+Points: 4  Priority: High 
+
+What to do: Advance automation features for TDs/PNW including data rights, audit logging, and privacy policy consolidation. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Audit logs populate correctly 
+
+[ ] Privacy policies consolidated and reflected in website 
+
+[ ] Permissions and access controls enforced 
+
+ 
+
+Task 3: Product Manager Agent deployment planning 
+
+Points: 3  Priority: Medium 
+
+What to do: Prepare for deployment of PM agent, finalize prompting architecture, and share architecture with stakeholders. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Prompts architecture documented and reviewed 
+
+[ ] Deployment plan approved 
+
+ 
+
+Task 4: Automation of sprint planning, summaries, and Jira task creation 
+
+Points: 3  Priority: Medium 
+
+What to do: Finalize automation scripts and permissions to auto-create Jira tasks and daily summaries. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Jira tasks created automatically from sprint plan 
+
+[ ] Daily summaries generated without errors 
+
+ 
+
+Focus 2: Azure & Access Permissions 
+
+Goal: Securely manage Azure permissions and app registrations for sprint tooling; ensure 5-10 minute propagation window is respected. 
+
+ 
+
+Task 1: Azure permission provisioning for PM agent 
+
+Points: 3  Priority: High 
+
+What to do: Obtain and verify Azure permissions; deploy product manager agent once approvals are in place. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Azure permission granted 
+
+[ ] PM agent deployed to target environment 
+
+ 
+
+Task 2: Graph API permissions alignment 
+
+Points: 2  Priority: Medium 
+
+What to do: Finalize required Graph API scopes (Chat.Read.All, Mail.Send, etc.) with admin consent. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Admin consent granted 
+
+[ ] APIs function as expected in test env 
+
+ 
+
+Focus 1: Onboarding Platform & Payment Integration  
+
+Goal: Advance onboarding platform testing, CDN/routing improvements, and payment portal integration readiness. 
+
+ 
+
+Task 1: Converged Pay / Stripe comparison and integration prep  
+
+Points: 3  Priority: High 
+
+What to do: Evaluate Converged Pay vs Stripe; prepare integration plan and testing strategy. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Comparison documented 
+
+[ ] Recommended path for MVP integration chosen 
+
+ 
+
+Task 2: Telix/Twilio migration flow setup  
+
+Points: 4  Priority: High 
+
+What to do: Set up migration flow, retry logic, and webhook architecture adjustments; coordinate with Doug. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Migration flow documented 
+
+[ ] Webhook endpoints updated and tested 
+
+ 
+
+Task 3: Onboarding portal unification & domain/credential handoffs  
+
+Points: 3  Priority: Medium 
+
+What to do: Consolidate onboarding portal for multiple clients; ensure domain/credential handoffs are streamlined. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Portal unified across clients 
+
+[ ] Credentials shared securely and access granted 
+
+ 
+
+Task 4: CDN planning & routing fixes  
+
+Points: 2  Priority: Medium 
+
+What to do: Finalize CDN integration (CDN planning, routing rules) and document changes. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] CDN plan documented 
+
+[ ] Routing fixes verified in test env 
+
+ 
+
+Focus 2: Privacy & Compliance 
+
+Goal: Ensure privacy policy alignment across FECA, chatbots, and call agent; resolve 60-day data retention concerns. 
+
+ 
+
+Task 1: Privacy policy alignment and publication 
+
+Points: 3  Priority: High 
+
+What to do: Consolidate and publish privacy policies for FECA, chatbots, and call agent on the website. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Policies published on website 
+
+[ ] Data retention policies aligned with vendor agreements 
+
+ 
+
+Faiyaz Rahman 
+
+ 
+
+Focus 1: Admin Portal Costs & Storage 
+
+Goal: Complete admin portal costs feature, storage cost analysis, and related integration tasks. 
+
+ 
+
+Task 1: Admin costs portal in admin panel 
+
+Points: 4  Priority: High 
+
+What to do: Build and deploy admin costs portal; integrate with storage cost analytics tools. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Portal functional in staging 
+
+[ ] Cost analytics data visible and correct 
+
+ 
+
+Task 2: Cost analytics evaluation (Firebase, Cloudinary, Bunny CDN, etc.) 
+
+Points: 3  Priority: Medium 
+
+What to do: Perform cost/benefit analysis on storage options and report findings. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Option comparisons documented 
+
+[ ] Recommendation provided 
+
+ 
+
+Task 3: Bunny.net storage integration for audio/files 
+
+Points: 3  Priority: High 
+
+What to do: Set up Bunny.net storage account, integrate via API, and prepare for media delivery. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Bunny.net account created 
+
+[ ] API-based file upload and retrieval verified 
+
+ 
+
+Focus 2: Onboarding & Access Provisioning 
+
+Goal: Coordinate access provisioning, credential sharing, and routing integration setup. 
+
+ 
+
+Task 1: Email environment setup (Outlook) & env blockers 
+
+Points: 2  Priority: High 
+
+What to do: Coordinate after-hours setup; ensure email env tokens are in place for testing. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Email environment accessible 
+
+[ ] Blocking blockers resolved 
+
+ 
+
+Task 2: Telnyx provisioning support 
+
+Points: 3  Priority: High 
+
+What to do: Assist with Telnyx number porting and webhook coordination; ensure testing environment readiness. 
+
+ 
+
+Acceptance Criteria: 
+
+[ ] Telnyx number ported or in progress 
+
+[ ] Webhook integration tested 
+
+ 
+
+POINTS RUBRIC: 
+
+ 
+
+1 = Small task, 1-2 hours 
+
+2 = Medium task, 2-4 hours 
+
+3 = Large task, 4-8 hours 
+
+5 = Very large task, 1-2 days 
+
+8 = Epic task, 2-3 days 

@@ -273,12 +273,15 @@ ${s.perPersonSummary.map((p: any) => `  - ${p.name}: ${p.summary} (Next: ${p.nex
 
     const prompt = `Analyze these daily standup summaries and extract:
 
-1. WHAT WAS COMPLETED: List specific tasks/features each person completed
+1. WHAT WAS COMPLETED: List specific tasks/features each person completed, organized by project
 2. WHO WORKED ON WHAT: For each person, what projects/areas they focused on
 3. BLOCKERS: Unresolved blockers or challenges that need to continue
 4. ACTION ITEMS: Pending action items that weren't completed yet
 
-Be specific about task names and assignees. This will be used to verify what from the previous sprint plan was actually completed.
+IMPORTANT:
+- Organize findings by project/product area, not just by person. Group completed work and pending items under their respective projects.
+- Preserve exact spellings of product names, vendor names, and client names. Never approximate proper nouns.
+- Be specific about task names and assignees. This will be used to verify what from the previous sprint plan was actually completed.
 
 Summaries:
 ${summariesText}`;
@@ -303,20 +306,53 @@ ${summariesText}`;
       return 'No Teams messages to analyze.';
     }
 
-    // Process in chunks if too many messages
+    // Group messages by channel/chat name for project separation
+    const messagesByChannel = new Map<string, any[]>();
+    for (const msg of messages) {
+      const channelName = msg.channelOrChatName || 'Unknown';
+      if (!messagesByChannel.has(channelName)) {
+        messagesByChannel.set(channelName, []);
+      }
+      messagesByChannel.get(channelName)!.push(msg);
+    }
+
+    // Format messages grouped by channel, then chunk if needed
+    const groupedMessagesText: string[] = [];
+    for (const [channelName, channelMsgs] of messagesByChannel) {
+      const msgsText = channelMsgs.map((m: any) => {
+        const timestamp = m.sentAt ? new Date(m.sentAt).toISOString() : (m.timestamp ? new Date(m.timestamp).toISOString() : 'Unknown');
+        return `  [${timestamp}] ${m.senderName}: ${m.content}`;
+      }).join('\n');
+      groupedMessagesText.push(`## Channel: ${channelName}\n${msgsText}`);
+    }
+
+    // Chunk the grouped text if too large
+    const allText = groupedMessagesText.join('\n\n');
     const chunkSize = 50;
     const chunks = [];
-    for (let i = 0; i < messages.length; i += chunkSize) {
-      chunks.push(messages.slice(i, i + chunkSize));
+    const allMsgsFlat = [...messagesByChannel.values()].flat();
+    for (let i = 0; i < allMsgsFlat.length; i += chunkSize) {
+      // Re-group each chunk by channel for context
+      const chunkMsgs = allMsgsFlat.slice(i, i + chunkSize);
+      const chunkByChannel = new Map<string, any[]>();
+      for (const msg of chunkMsgs) {
+        const ch = msg.channelOrChatName || 'Unknown';
+        if (!chunkByChannel.has(ch)) chunkByChannel.set(ch, []);
+        chunkByChannel.get(ch)!.push(msg);
+      }
+      let chunkText = '';
+      for (const [ch, msgs] of chunkByChannel) {
+        const msgsText = msgs.map((m: any) => {
+          const timestamp = m.sentAt ? new Date(m.sentAt).toISOString() : (m.timestamp ? new Date(m.timestamp).toISOString() : 'Unknown');
+          return `  [${timestamp}] ${m.senderName}: ${m.content}`;
+        }).join('\n');
+        chunkText += `## Channel: ${ch}\n${msgsText}\n\n`;
+      }
+      chunks.push(chunkText);
     }
 
     const chunkAnalyses = [];
-    for (const [index, chunk] of chunks.entries()) {
-      const messagesText = chunk.map((m: any) => {
-        const timestamp = m.timestamp ? new Date(m.timestamp).toISOString() : 'Unknown';
-        return `[${timestamp}] ${m.senderName}: ${m.content}`;
-      }).join('\n');
-
+    for (const [index, chunkText] of chunks.entries()) {
       const prompt = `Analyze these Teams messages (chunk ${index + 1}/${chunks.length}) and extract:
 
 1. NEW WORK MENTIONED: Any new features, tasks, or projects discussed for future sprints
@@ -327,10 +363,13 @@ ${summariesText}`;
 6. CLIENT WORK: Tasks related to client projects or client requests (note if new client or existing)
 7. BUGS/ISSUES: Bug fixes or issues from clients that need addressing
 
-Pay attention to context about priorities, client work, and task status.
+IMPORTANT:
+- Messages are grouped by Teams channel. Each channel typically represents a separate project. Maintain this project separation in your analysis — note which channel/project each item belongs to.
+- Preserve exact spellings of product names, vendor names, and client names as they appear in the messages. Never paraphrase or approximate proper nouns.
+- For each extracted item, note which channel/project it came from.
 
 Messages:
-${messagesText}`;
+${chunkText}`;
 
       const analysis = await this.reactAgent.callLLM(prompt);
       chunkAnalyses.push(analysis);
@@ -369,15 +408,16 @@ DAILY SUMMARIES (What actually happened):
 ${summariesText}
 
 INSTRUCTIONS:
-1. For EACH task in the previous sprint plan, check if it appears in the daily summaries
-2. Create three lists:
-   - COMPLETED TASKS: Tasks from previous plan that were fully finished (with evidence from summaries)
-   - PARTIALLY COMPLETE: Tasks that were worked on but not finished (mention what's done and what's remaining)
-   - NOT STARTED/PENDING: Tasks from previous plan NOT mentioned at all (must carry forward to next sprint)
-3. For each incomplete task (partial or pending), note:
+1. First, note the FOCUS AREA STRUCTURE from the previous plan — each focus area represents a distinct project. List which projects/focuses existed for each person and their status. This project separation structure should be preserved in the new plan.
+2. For EACH task in the previous sprint plan, check if it appears in the daily summaries
+3. Create three lists:
+   - COMPLETED TASKS: Tasks from previous plan that were fully finished (with evidence from summaries). Note which project/focus they belonged to.
+   - PARTIALLY COMPLETE: Tasks that were worked on but not finished. Describe qualitatively what's done and what remains (do NOT use percentages). Note which project/focus they belonged to.
+   - NOT STARTED/PENDING: Tasks from previous plan NOT mentioned at all (must carry forward to next sprint). Note which project/focus they belonged to.
+4. For each incomplete task (partial or pending), note:
    - Who it was originally assigned to
-   - What percentage is done (if partially complete)
-   - What remains to be done
+   - Which focus/project area it belonged to
+   - What qualitatively remains to be done
 
 Be thorough - every task from the previous plan must be categorized as completed, partially complete, or pending.`;
 
@@ -435,13 +475,28 @@ SPRINT PLANNING RULES:
    - HIGH priority: Client work (new or existing), bug fixes, client requests, or tasks explicitly mentioned as urgent/high priority
    - MEDIUM priority: Internal company tasks, refactoring, technical debt
    - Do NOT base priority on whether task is new or pending - base it on the nature of the work
+5. PROJECT SEPARATION: Each distinct project/client MUST be its own focus area. NEVER combine multiple projects under one focus.
+   - Use the previous sprint plan's focus structure as a guide for how projects are organized
+   - Use Teams channel names to identify project boundaries
+   - If a new project appears in messages that wasn't in the previous plan, create a new focus for it
+   - Examples of WRONG: "PNW Automation & Bot Infrastructure" combining PNW, sales bot, and PM agent
+   - Examples of RIGHT: separate focuses for "PNW & PIVH Automations", "Sales Bot", "Product Manager Agent", "CRM", "Onboarding Platform"
+6. PRIMARY GOALS must NOT include work already completed in the previous sprint. Only include goals for work that is pending, partially complete, or new.
+7. SPELLING: Always copy exact spellings of vendor names, product names, client names, and other proper nouns directly from the source data (Teams messages, previous sprint plan, daily summaries). Never paraphrase, abbreviate, or approximate proper nouns. If a name appears in the source data, use that exact spelling.
+8. RECURRING NOTES: Look at the previous sprint plan's notes section. Any notes that are general/ongoing (not specific to that sprint's review) should be carried forward to the new plan. These are recurring operational notes the team wants in every sprint.
+9. TASK GRANULARITY: Prefer fewer, well-scoped tasks (3-5 points each) per focus. Consolidate related small items into a single meaningful task rather than fragmenting into many 1-2 point tasks.
+10. PRODUCT AWARENESS: The previous sprint plan shows which products exist and how they're organized. Use it to understand:
+    - Which products are already deployed (don't plan "deployment" for them — focus on improvements or refinements instead)
+    - Which products are in development
+    - How the team organizes work across projects
+    - Who owns which projects
 
 IMPORTANT: You MUST respond with ONLY a JSON object (no markdown, no code blocks, no text before or after). The JSON must match this exact schema:
 
 {
   "sprintDateRange": { "start": "${nextMonday.toISOString().split('T')[0]}", "end": "${nextNextMonday.toISOString().split('T')[0]}" },
   "primaryGoals": ["string"],
-  "notes": ["Previous Sprint Review: [summarize completed, partially complete, and pending tasks]", "other notes"],
+  "notes": ["Previous Sprint Review: [summarize completed, partially complete, and pending tasks - use qualitative descriptions, NOT percentages]", "carry forward any recurring/ongoing notes from the previous sprint plan"],
   "ownerBreakdown": [
     {
       "name": "Full Name",
@@ -465,9 +520,9 @@ IMPORTANT: You MUST respond with ONLY a JSON object (no markdown, no code blocks
 }
 
 Generate the sprint plan with:
-1. Primary Goals (3-5 bullet points) - focus on completing incomplete tasks + high-priority new work
-2. Notes section - MUST include Previous Sprint Review (what completed, what partially complete with %, what pending)
-3. Owner breakdown with tasks for EACH person: ${teamMembers.map(m => m.name).join(', ')} - ensure ALL incomplete tasks are included`;
+1. Primary Goals (3-5 bullet points) - focus on completing incomplete tasks + high-priority new work. Do NOT include already-completed work as goals.
+2. Notes section - MUST include Previous Sprint Review (what completed, what partially complete, what pending — describe qualitatively, NO percentages). Also carry forward any recurring/ongoing notes from the previous sprint plan's notes section.
+3. Owner breakdown with tasks for EACH person: ${teamMembers.map(m => m.name).join(', ')} - ensure ALL incomplete tasks are included, with each project as a separate focus area`;
 
     // Use direct JSON generation instead of tool calling for gpt-5-nano
     const response = await this.openaiService.chatCompletion({

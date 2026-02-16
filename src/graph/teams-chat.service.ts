@@ -58,6 +58,7 @@ export class TeamsChatService {
         const messages = await this.fetchChatMessages(
           targetUserId,
           chatId,
+          chatName,
           cutoffDate,
         );
         allMessages.push(...messages);
@@ -79,6 +80,7 @@ export class TeamsChatService {
   private async fetchChatMessages(
     userId: string,
     chatId: string,
+    chatName: string,
     cutoffDate: Date,
   ): Promise<TeamsChatMessageData[]> {
     const messages: TeamsChatMessageData[] = [];
@@ -100,7 +102,7 @@ export class TeamsChatService {
           messageId: msg.id as string,
           source: 'chat',
           channelOrChatId: chatId,
-          channelOrChatName: '',
+          channelOrChatName: chatName,
           senderName: (user?.displayName as string) || 'Unknown',
           senderEmail: (user?.email as string) || '',
           content: this.stripHtml(body?.content || ''),

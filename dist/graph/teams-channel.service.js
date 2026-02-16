@@ -46,7 +46,7 @@ let TeamsChannelService = class TeamsChannelService {
             const channelName = channel.displayName;
             this.logger.info({ channelId, channelName, daysBack }, 'Fetching channel messages');
             try {
-                const messages = await this.fetchChannelMessages(teamId, channelId, cutoffDate);
+                const messages = await this.fetchChannelMessages(teamId, channelId, channelName, cutoffDate);
                 allMessages.push(...messages);
                 this.logger.info({ channelId, messageCount: messages.length }, 'Channel messages fetched');
             }
@@ -56,7 +56,7 @@ let TeamsChannelService = class TeamsChannelService {
         }
         return allMessages;
     }
-    async fetchChannelMessages(teamId, channelId, cutoffDate) {
+    async fetchChannelMessages(teamId, channelId, channelName, cutoffDate) {
         const messages = [];
         let nextLink = `/teams/${teamId}/channels/${channelId}/messages?$top=50`;
         while (nextLink) {
@@ -65,9 +65,9 @@ let TeamsChannelService = class TeamsChannelService {
                 const sentAt = new Date(msg.createdDateTime);
                 if (sentAt < cutoffDate)
                     continue;
-                messages.push(this.mapMessage(msg, channelId, false));
+                messages.push(this.mapMessage(msg, channelId, channelName, false));
                 if (msg.id) {
-                    const replies = await this.fetchReplies(teamId, channelId, msg.id, cutoffDate);
+                    const replies = await this.fetchReplies(teamId, channelId, channelName, msg.id, cutoffDate);
                     messages.push(...replies);
                 }
             }
@@ -75,7 +75,7 @@ let TeamsChannelService = class TeamsChannelService {
         }
         return messages;
     }
-    async fetchReplies(teamId, channelId, messageId, cutoffDate) {
+    async fetchReplies(teamId, channelId, channelName, messageId, cutoffDate) {
         const replies = [];
         try {
             const response = await this.graphClient
@@ -86,7 +86,7 @@ let TeamsChannelService = class TeamsChannelService {
                 const sentAt = new Date(reply.createdDateTime);
                 if (sentAt < cutoffDate)
                     continue;
-                replies.push(this.mapMessage(reply, channelId, true, messageId));
+                replies.push(this.mapMessage(reply, channelId, channelName, true, messageId));
             }
         }
         catch (error) {
@@ -94,7 +94,7 @@ let TeamsChannelService = class TeamsChannelService {
         }
         return replies;
     }
-    mapMessage(msg, channelId, isReply, parentMessageId) {
+    mapMessage(msg, channelId, channelName, isReply, parentMessageId) {
         const from = msg.from;
         const user = from?.user;
         const body = msg.body;
@@ -102,7 +102,7 @@ let TeamsChannelService = class TeamsChannelService {
             messageId: msg.id,
             source: 'channel',
             channelOrChatId: channelId,
-            channelOrChatName: '',
+            channelOrChatName: channelName,
             senderName: user?.displayName || 'Unknown',
             senderEmail: user?.email || '',
             content: this.stripHtml(body?.content || ''),

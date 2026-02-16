@@ -1,0 +1,284 @@
+---                                                                                                                     
+  PM-Agent System Analysis: Gaps & Differences                                                                            
+                                                                                                                          
+  Part 1: Sprint Plan Differences (Agent vs Modified)                                                                     
+
+  Difference 1: Spelling Errors — "Telix" and "FECA"                                                                      
+                                                                                                                          
+  ┌──────────┬───────────────────────────────────┬─────────────────────────────────────────────┐
+  │          │           Agent Version           │              Modified Version               │
+  ├──────────┼───────────────────────────────────┼─────────────────────────────────────────────┤
+  │ Line 13  │ "Twilio to Telix migration"       │ "Twilio to Telnyx migration"                │
+  ├──────────┼───────────────────────────────────┼─────────────────────────────────────────────┤
+  │ Line 177 │ "Telix/Twilio migration"          │ "Telnyx/Twilio migration"                   │
+  ├──────────┼───────────────────────────────────┼─────────────────────────────────────────────┤
+  │ Line 17  │ "across FECA/chatbot/voice agent" │ "across FECA/chatbot" (voice agent removed) │
+  └──────────┴───────────────────────────────────┴─────────────────────────────────────────────┘
+
+  Root Cause: The agent's LLM is generating spellings from memory rather than verifying against the actual Teams messages
+  or chat content where "Telnyx" and "FECA" would be spelled correctly. The summarization and message analysis prompts
+  don't instruct the LLM to preserve exact spellings of product/vendor names from source data.
+
+  Fix needed: Add a "Named Entity Preservation" instruction to the prompts — "Always use exact spellings of product names,
+   vendor names, and client names as they appear in the source messages. Never paraphrase or approximate proper nouns."
+
+  ---
+  Difference 2: Voice Agent Audit Already Done — Still Listed as Primary Goal
+
+  Agent Version (line 17): "Deliver privacy policy alignment and audit improvements across FECA/chatbot/voice agent"
+  Modified Version (line 17): "Deliver privacy policy alignment and audit improvements across FECA/chatbot; publish
+  website
+     privacy policy updates"
+
+  Root Cause: The previous plan cross-reference (analyzePreviousPlan) should have caught that voice agent audit was
+  completed in the prior sprint. The agent's notes even say "Completed items include telemetry/audit logging and privacy
+  policy consolidation in the voice agent" — yet it still bubbled up as a primary goal. The generateFinalPlan prompt
+  doesn't enforce: "Do NOT include completed work as a goal for the new sprint."
+
+  Fix needed: Add explicit rule to the final plan prompt: "Primary goals MUST NOT include work that was already completed
+  in the previous sprint. Only include goals for work that is pending or new."
+
+  ---
+  Difference 3: Confused Between Voice Agent and Product Manager Agent
+
+  Agent (line 19): "Complete 4Trades.ai product manager agent readiness: end-to-end testing, prompts architecture
+    refinement, and agent deployment planning"
+  Modified (line 19): "Complete 4Trades.ai Product Manager agent readiness: end-to-end testing, prompts architecture
+    refinement."
+
+  The agent added "agent deployment planning" — the PM agent is already deployed (it's the system generating these
+  plans!). The agent doesn't understand that it itself is the PM agent and confuses it with something that still needs
+  deployment.
+
+  Root Cause: No context is provided to the LLM about what the PM agent actually is or that it's already running. The
+  system prompt just says "You are a sprint planning agent" but doesn't clarify which products are already live vs in
+  development.
+
+  Fix needed: Add a "Product Context" section to the system prompt listing products and their current status (deployed,
+  in-development, etc.).
+
+  ---
+  Difference 4: Missing "Ad-hoc bug fixes" Note
+
+  ┌───────────────┬─────────────────────────────────────────────────────────────────────┐
+  │ Agent Version │                     Modified Version (line 32)                      │
+  ├───────────────┼─────────────────────────────────────────────────────────────────────┤
+  │ (not present) │ "Ad-hoc bug fixes of issues raised by client of delivered products" │
+  └───────────────┴─────────────────────────────────────────────────────────────────────┘
+
+  Root Cause: This is a standing note that should always be included. The agent has no concept of "standing notes" that
+  persist across every sprint plan.
+
+  Fix needed: Add a standingNotes config (or hardcode in the prompt): "The following notes MUST always be included in
+  every sprint plan: 'Ad-hoc bug fixes of issues raised by client of delivered products'."
+
+  ---
+  Difference 5: Unnecessary Percentages
+
+  The agent version includes percentage-based completion tracking in the notes. The modified version removes these.
+
+  Root Cause: The analyzePreviousPlan prompt explicitly asks for "What percentage is done (if partially complete)" and the
+   final prompt says "what partially complete with %". This encourages fabricated percentages that aren't grounded in real
+   data.
+
+  Fix needed: Remove percentage instructions from prompts. Replace with qualitative status: "Note what's done and what
+  remains, but do NOT include percentages."
+
+  ---
+  Difference 6: Projects Mixed Together Instead of Separated
+
+  This is the biggest structural issue. The agent version lumps everything under vague focus areas like "PNW Automation &
+  Bot Infrastructure" which mixes:
+  - PNW automation
+  - PIVH automation
+  - Sales bot
+  - Product manager agent
+  - Sprint planning agent
+  - Data rights/audit
+
+  The modified version cleanly separates each project as its own focus:
+  - Focus 1: PNW & PIVH Automations (separate project)
+  - Focus 2: CRM (separate project)
+  - Focus 3: Product Manager Agent (separate project)
+  - Focus 4: Systems Privacy Audit (separate project)
+  - Focus 5: Onboarding Platform & Payment Integration (separate project)
+
+  And for Faiyaz:
+  - Focus 1: Flooring America Voice Agent (new client — completely missed by agent)
+  - Focus 2: Admin Portal Costs & Storage
+  - Focus 3: FECA Privacy Audit
+  - Focus 4: Teams-Sales Bot
+
+  Root Cause: The sprint plan generation prompt doesn't instruct the LLM to treat each project as a separate focus area.
+  It says focusName: "Project Name" but doesn't enforce separation. More critically, Teams channels are fetched but the
+  channel names are not used to categorize work. Since the team creates separate channels per project, this is a massive
+  missed opportunity for the agent to understand project boundaries.
+
+  Fix needed:
+  1. Add to the prompt: "Each distinct project/client must be its own focus area. Never combine multiple projects under
+  one focus. Use Teams channel names as a guide for project separation."
+  2. When formatting messages for LLM analysis, group messages by channel name so the LLM can see project boundaries
+  clearly.
+
+  ---
+  Difference 7: Completely Missing Items in Agent Version
+
+  a) Flooring America Voice Agent (Faiyaz)
+  The modified version has an entire focus for setting up a voice agent for new client "Flooring America of Oregon" —
+  completely absent from agent's plan.
+
+  Root cause: This was likely discussed in Teams messages but the agent's message analysis either missed it or didn't
+  surface it prominently enough for the final plan generation.
+
+  b) CRM as a separate focus with specific tasks
+  Modified version breaks CRM into: Advanced Features (voice capture, referral matching) + Configurability. Agent version
+  barely mentions CRM.
+
+  c) Teams Sales Bot handover to Faiyaz
+  Modified version has Faiyaz taking over the sales bot from Azmain. Agent version keeps it under Azmain.
+
+  d) PM Agent Refinement task (the meta-task)
+  Modified version includes "Compare agent-made and self-edited versions, and refine the agent so it creates better sprint
+   documentation" — the very task being done now. Agent had a vague "deployment planning" instead.
+
+  Root Cause: The agent's multi-pass analysis loses specificity. By the time summaries → messages → previous plan analyses
+   are fed into the final prompt, concrete task details get diluted into generic categories.
+
+  ---
+  Difference 8: Different Task Granularity and Points
+
+  Agent version has many small 2-3 point tasks. Modified version uses mostly 5-point tasks with broader scope. The
+  modified version is more realistic about sprint capacity — fewer, bigger, well-defined tasks rather than many fragmented
+   ones.
+
+  Root Cause: The prompt doesn't provide guidance on task granularity. It should instruct: "Prefer fewer, well-scoped
+  tasks (3-5 points each) over many small fragmented tasks."
+
+  ---
+  Difference 9: "PICS/PNW" vs "PIVH/PNW"
+
+  Agent wrote "PICS/PNW" in notes — should be "PIVH/PNW". Another spelling/name error from not verifying against source
+  data.
+
+  ---
+  Difference 10: Bunny.net/Storage References
+
+  Agent version includes Bunny.net storage integration tasks and mentions it in the notes. Modified version removes
+  Bunny.net from notes, suggesting it's not a priority for this sprint. Agent is surfacing lower-priority items at equal
+  weight to critical work.
+
+  ---
+  Part 2: Systemic Gaps in the PM-Agent
+
+  Gap 1: No Channel-Based Project Separation
+
+  Problem: Teams channels are fetched correctly (all channels), but messages are flattened into a single list for LLM
+  analysis. The channel name — which maps to a specific project — is included in the data but the prompt doesn't instruct
+  the LLM to use channel names for project categorization.
+
+  Impact: The agent can't distinguish which discussions belong to which project, leading to mixed-up focus areas.
+
+  Fix: Group messages by channelOrChatName before feeding to LLM. Add explicit instruction: "Messages are grouped by Teams
+   channel. Each channel represents a separate project. Maintain this separation in the sprint plan."
+
+  Gap 2: Summaries May Lose Project Context
+
+  Problem: The summarization prompt extracts per-person progress but doesn't tag which project each item belongs to. A
+  person mentioning "finished the CRM voice capture" gets summarized as a progress item without project tagging.
+
+  Impact: When the sprint plan generator reads summaries, it can't accurately map completed work to specific projects.
+
+  Fix: Add to summarization prompt: "For each progress item, blocker, and commitment, identify which project/product it
+  relates to (e.g., CRM, Voice Agent, Onboarding Platform, PNW Automation, etc.)."
+
+  Gap 3: No Product/Project Registry
+
+  Problem: The agent has no concept of what products/projects exist, their current status, or which team member owns them.
+   It relies entirely on what it can infer from messages and summaries.
+
+  Impact: It can't distinguish between a new project mention and an existing product, leading to confusion like treating
+  the already-deployed PM agent as something that needs "deployment planning."
+
+  Fix: Add a PROJECT_REGISTRY config (env var or config file):
+  [
+    {"name": "CRM", "status": "in-development", "owner": "Azmain", "channel": "CRM"},
+    {"name": "Voice Agent", "status": "deployed", "owner": "Faiyaz", "channel": "voice-agent"},
+    {"name": "PM Agent", "status": "deployed", "owner": "Azmain", "channel": "pm-agent"},
+    ...
+  ]
+  Feed this into the system prompt so the LLM knows the landscape.
+
+  Gap 4: No Standing Notes / Recurring Items
+
+  Problem: No mechanism for notes that should appear in every sprint (like "Ad-hoc bug fixes of issues raised by client").
+
+  Fix: Add a STANDING_NOTES config that gets injected into every sprint plan.
+
+  Gap 5: Spelling Verification Not Enforced
+
+  Problem: The LLM generates names from its probabilistic output rather than copying exact strings from source data.
+
+  Fix: Add a "proper nouns" list to the system prompt (extracted from project registry + known vendors: Telnyx, FECA,
+  PIVH, PNW, etc.). Instruct: "Use ONLY these exact spellings for product/vendor/client names."
+
+  Gap 6: No Task Granularity Guidance
+
+  Problem: Agent creates too many small tasks instead of well-scoped focused tasks.
+
+  Fix: Add to prompt: "Each focus should have 1-3 well-scoped tasks. Prefer consolidating related small items into a
+  single meaningful task rather than fragmenting work."
+
+  Gap 7: Messages Not Persisted — No Debugging Capability
+
+  Problem: Teams messages are fetched on-demand and not stored. If the sprint plan is wrong, there's no way to inspect
+  what messages the agent actually saw.
+
+  Fix: Persist fetched messages to the teamsMessages collection (schema already exists but isn't used). This enables
+  debugging and also allows re-running sprint plan generation without re-fetching.
+
+  Gap 8: No Validation of LLM Output Against Source Data
+
+  Problem: The multi-pass analysis can lose information. There's no step that validates the final plan against the raw
+  data to check for missing items.
+
+  Fix: Add a validation pass: After generating the final plan, cross-reference it against the messages analysis to check
+  if any high-priority items or new client work was dropped.
+
+  Gap 9: Refresh Endpoint Uses Re-parsing, Not Direct Editing
+
+  Problem: The admin dashboard has no inline editing. Users must edit the Word doc in OneDrive, then click "Fetch Updates"
+   to re-parse. This works but adds friction and depends on Word doc parsing accuracy.
+
+  Improvement: Consider adding inline editing in the admin dashboard so the planData in MongoDB can be directly modified
+  before Jira task creation. The approved/edited version should be what creates Jira tasks — this is already noted in the
+  modified plan's acceptance criteria.
+
+  ---
+  Part 3: Summary of All Required Changes
+
+  Prompt Changes (High Impact)
+
+  1. Named entity preservation — enforce exact spellings from source
+  2. "Don't include completed work as goals" rule
+  3. Project separation — each project = separate focus area
+  4. Remove percentage instructions — use qualitative status
+  5. Task granularity guidance — fewer, bigger tasks
+  6. Product context/registry — feed into system prompt
+  7. Channel-based grouping — group messages by channel for LLM
+
+  Configuration Changes
+
+  8. Standing notes — always-include notes list
+  9. Project registry — products, status, owners, channels
+  10. Known proper nouns list — vendor/product/client names
+
+  Code Changes
+
+  11. Persist Teams messages to MongoDB for debugging
+  12. Group messages by channel before LLM analysis
+  13. Add validation pass after plan generation
+  14. Tag summaries with project context in summarization prompt
+  15. Admin dashboard inline editing (optional improvement)
+
+  These changes would bring the agent's output much closer to your manually-edited version. The biggest wins are the
+  project registry, channel-based grouping, and prompt refinements around project separation and entity preservation.

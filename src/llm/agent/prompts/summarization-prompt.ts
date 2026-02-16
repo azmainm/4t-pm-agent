@@ -31,10 +31,13 @@ Guidelines:
 - Action items should be specific and include who is responsible if mentioned.
 - Decisions should be clear statements of what was decided.
 - Blockers should include both technical and non-technical blockers.
+- **Project Tagging**: For each progress item, blocker, and commitment, identify which project/product it relates to. Prefix each item with the project name in brackets, e.g., "[CRM] Completed voice capture feature", "[Voice Agent] Fixed routing issue", "[Onboarding Platform] Tested payment flow". Infer project names from context — product names mentioned, client names, and the nature of the work.
 - **upcomingWork**: Capture NEW tasks, features, or plans discussed for current or future sprints:
   - If someone mentions "I'll work on X", "We need to build Y", "Let's do Z next sprint" → add to upcomingWork
   - Mark status as "planned" if not started, "started" if in progress, "completed_in_current_sprint" if finished
   - Mark targetSprint as "current" if for this sprint, "next" if for next sprint
   - Include priority if explicitly mentioned (e.g., "high priority", "urgent", "client request")
+  - Include the project name the task belongs to
+- **Spelling**: Use the exact spellings of product names, vendor names, and client names as they appear in the transcript. Never paraphrase or approximate proper nouns.
 - Be thorough but concise. Don't add information that wasn't in the transcript.
 - If someone didn't speak or had no update, still list them with empty arrays.`;

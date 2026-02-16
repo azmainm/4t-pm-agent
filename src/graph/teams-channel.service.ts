@@ -60,6 +60,7 @@ export class TeamsChannelService {
         const messages = await this.fetchChannelMessages(
           teamId,
           channelId,
+          channelName,
           cutoffDate,
         );
         allMessages.push(...messages);
@@ -81,6 +82,7 @@ export class TeamsChannelService {
   private async fetchChannelMessages(
     teamId: string,
     channelId: string,
+    channelName: string,
     cutoffDate: Date,
   ): Promise<TeamsMessageData[]> {
     const messages: TeamsMessageData[] = [];
@@ -94,13 +96,14 @@ export class TeamsChannelService {
         const sentAt = new Date(msg.createdDateTime);
         if (sentAt < cutoffDate) continue;
 
-        messages.push(this.mapMessage(msg, channelId, false));
+        messages.push(this.mapMessage(msg, channelId, channelName, false));
 
         // Fetch replies for each message
         if (msg.id) {
           const replies = await this.fetchReplies(
             teamId,
             channelId,
+            channelName,
             msg.id,
             cutoffDate,
           );
@@ -117,6 +120,7 @@ export class TeamsChannelService {
   private async fetchReplies(
     teamId: string,
     channelId: string,
+    channelName: string,
     messageId: string,
     cutoffDate: Date,
   ): Promise<TeamsMessageData[]> {
@@ -133,7 +137,7 @@ export class TeamsChannelService {
       for (const reply of response.value || []) {
         const sentAt = new Date(reply.createdDateTime);
         if (sentAt < cutoffDate) continue;
-        replies.push(this.mapMessage(reply, channelId, true, messageId));
+        replies.push(this.mapMessage(reply, channelId, channelName, true, messageId));
       }
     } catch (error) {
       this.logger.warn(
@@ -148,6 +152,7 @@ export class TeamsChannelService {
   private mapMessage(
     msg: Record<string, unknown>,
     channelId: string,
+    channelName: string,
     isReply: boolean,
     parentMessageId?: string,
   ): TeamsMessageData {
@@ -159,7 +164,7 @@ export class TeamsChannelService {
       messageId: msg.id as string,
       source: 'channel',
       channelOrChatId: channelId,
-      channelOrChatName: '',
+      channelOrChatName: channelName,
       senderName: (user?.displayName as string) || 'Unknown',
       senderEmail: (user?.email as string) || '',
       content: this.stripHtml(body?.content || ''),

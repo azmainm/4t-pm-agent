@@ -45,7 +45,7 @@ let TeamsChatService = class TeamsChatService {
             const chatName = chat.topic || 'Unnamed Chat';
             this.logger.info({ chatId, chatName, daysBack }, 'Fetching chat messages');
             try {
-                const messages = await this.fetchChatMessages(targetUserId, chatId, cutoffDate);
+                const messages = await this.fetchChatMessages(targetUserId, chatId, chatName, cutoffDate);
                 allMessages.push(...messages);
                 this.logger.info({ chatId, messageCount: messages.length }, 'Chat messages fetched');
             }
@@ -55,7 +55,7 @@ let TeamsChatService = class TeamsChatService {
         }
         return allMessages;
     }
-    async fetchChatMessages(userId, chatId, cutoffDate) {
+    async fetchChatMessages(userId, chatId, chatName, cutoffDate) {
         const messages = [];
         let nextLink = `/users/${userId}/chats/${chatId}/messages?$top=50`;
         while (nextLink) {
@@ -71,7 +71,7 @@ let TeamsChatService = class TeamsChatService {
                     messageId: msg.id,
                     source: 'chat',
                     channelOrChatId: chatId,
-                    channelOrChatName: '',
+                    channelOrChatName: chatName,
                     senderName: user?.displayName || 'Unknown',
                     senderEmail: user?.email || '',
                     content: this.stripHtml(body?.content || ''),

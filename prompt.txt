@@ -1,0 +1,12 @@
+Thoroughly analyze pm-agent system
+See all differences between the agent’s made version(sprintplan-agent.txt) and version after I modified(sprintplan-modified.txt). Here are some issues below but u should also identify if there are more differences which could have been identified from chats or transcript summaries:
+Telnyx/FECA spellings wrong- should have verified from chat 
+voice agent audit was already done yet it still mentioned it in the primary goals - if it checked transcript properly or maybe chat it would have known
+confused between voice agent and product manager agent - also this agent was already deployed - why is it a primary goal for the next sprint
+Should always mention in notes:  Ad-hoc bug fixes of issues raised by client of delivered products
+no need percentages
+mixed all the sales bot, product manager, pnw autmation, pivh autmation, crm stuff, onboarding stuff, other projects. each project should be treated as separate focus 
+focus on how i changed the focuses, goals and tasks
+i made a lot of changes to the tasks, focuses, goals, etc. 
+
+if needed fetch the summaries created and stored in mongo, chats, check if all messages in teams channels are being fetched too as they are crucial and we in the team always create separate channels for separate projects and that helps separate concerns. so in that way agent should know to separate the different projects and how. identify if summaries are being made right too. find all gaps in the system. next time i want the plans to be made as accurately as my modified version. or at least as close as possible. 
