@@ -67,7 +67,7 @@ export class JiraService implements OnModuleInit {
       for (const focus of owner.focuses) {
         for (const task of focus.tasks) {
           try {
-            const description = this.buildAdfDescription(task, focus);
+            const description = this.buildAdfDescription(task);
 
             // Log the payload for debugging
             this.logger.debug(
@@ -88,6 +88,7 @@ export class JiraService implements OnModuleInit {
                 issuetype: { name: 'Task' },
                 assignee: member.jiraAccountId ? { accountId: member.jiraAccountId } : undefined,
                 priority: { name: this.mapPriority(task.priority) },
+                customfield_10166: task.points,
                 labels: [
                   'sprint-agent',
                   focus.focusName
@@ -118,7 +119,7 @@ export class JiraService implements OnModuleInit {
               await this.client.issues.doTransition({
                 issueIdOrKey: issueKey,
                 transition: {
-                  id: '11', // TO DO transition ID (common in Jira, may vary)
+                  id: '3', // To-Do transition ID
                 },
               });
               this.logger.info({ issueKey }, 'Issue status set to TO DO');
@@ -179,36 +180,8 @@ export class JiraService implements OnModuleInit {
 
   private buildAdfDescription(
     task: SprintPlanOutput['ownerBreakdown'][0]['focuses'][0]['tasks'][0],
-    focus: SprintPlanOutput['ownerBreakdown'][0]['focuses'][0],
   ): Record<string, unknown> {
     const content: Record<string, unknown>[] = [
-      {
-        type: 'paragraph',
-        content: [
-          { type: 'text', text: 'Focus: ', marks: [{ type: 'strong' }] },
-          { type: 'text', text: focus.focusName },
-        ],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          { type: 'text', text: 'Goal: ', marks: [{ type: 'strong' }] },
-          { type: 'text', text: focus.goal },
-        ],
-      },
-      {
-        type: 'paragraph',
-        content: [
-          { type: 'text', text: 'Points: ', marks: [{ type: 'strong' }] },
-          { type: 'text', text: `${task.points}` },
-          { type: 'text', text: ' | ' },
-          { type: 'text', text: 'Priority: ', marks: [{ type: 'strong' }] },
-          { type: 'text', text: task.priority },
-        ],
-      },
-      {
-        type: 'rule',
-      },
       {
         type: 'paragraph',
         content: [{ type: 'text', text: task.description }],

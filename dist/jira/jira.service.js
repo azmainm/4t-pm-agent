@@ -53,7 +53,7 @@ let JiraService = class JiraService {
             for (const focus of owner.focuses) {
                 for (const task of focus.tasks) {
                     try {
-                        const description = this.buildAdfDescription(task, focus);
+                        const description = this.buildAdfDescription(task);
                         this.logger.debug({
                             projectKey: this.projectKey,
                             summary: task.title,
@@ -68,6 +68,7 @@ let JiraService = class JiraService {
                                 issuetype: { name: 'Task' },
                                 assignee: member.jiraAccountId ? { accountId: member.jiraAccountId } : undefined,
                                 priority: { name: this.mapPriority(task.priority) },
+                                customfield_10166: task.points,
                                 labels: [
                                     'sprint-agent',
                                     focus.focusName
@@ -91,7 +92,7 @@ let JiraService = class JiraService {
                             await this.client.issues.doTransition({
                                 issueIdOrKey: issueKey,
                                 transition: {
-                                    id: '11',
+                                    id: '3',
                                 },
                             });
                             this.logger.info({ issueKey }, 'Issue status set to TO DO');
@@ -133,35 +134,8 @@ let JiraService = class JiraService {
         }, 'Jira issue creation complete');
         return results;
     }
-    buildAdfDescription(task, focus) {
+    buildAdfDescription(task) {
         const content = [
-            {
-                type: 'paragraph',
-                content: [
-                    { type: 'text', text: 'Focus: ', marks: [{ type: 'strong' }] },
-                    { type: 'text', text: focus.focusName },
-                ],
-            },
-            {
-                type: 'paragraph',
-                content: [
-                    { type: 'text', text: 'Goal: ', marks: [{ type: 'strong' }] },
-                    { type: 'text', text: focus.goal },
-                ],
-            },
-            {
-                type: 'paragraph',
-                content: [
-                    { type: 'text', text: 'Points: ', marks: [{ type: 'strong' }] },
-                    { type: 'text', text: `${task.points}` },
-                    { type: 'text', text: ' | ' },
-                    { type: 'text', text: 'Priority: ', marks: [{ type: 'strong' }] },
-                    { type: 'text', text: task.priority },
-                ],
-            },
-            {
-                type: 'rule',
-            },
             {
                 type: 'paragraph',
                 content: [{ type: 'text', text: task.description }],
